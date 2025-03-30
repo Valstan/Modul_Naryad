@@ -1,98 +1,55 @@
 # gui/employees_form.py
+from typing import Optional
+
 import customtkinter as ctk
-from tkinter import ttk
 from db.database import Database
+from gui.base_form import BaseForm
 from gui.dialogs import show_error, show_info
 from utils.validators import validate_unique_employee_id
-from typing import Optional, List
 
 
-class EmployeesForm(ctk.CTkFrame):
+class EmployeesForm(BaseForm):
     """Форма для управления данными работников."""
 
-    def __init__(self, parent: ctk.CTkFrame, db: Database) -> None:
-        super().__init__(parent)
-        self.db = db
-        self._setup_ui()
-        self._load_employees()
+    def __init__(self, parent: ctk.CTkFrame, db: Database):
+        columns = ["Табельный №", "ФИО", "Цех", "Должность"]
+        super().__init__(parent, db, columns)
+        self._load_data("SELECT employee_id, full_name, workshop_number, position FROM employees")
 
-    def _setup_ui(self) -> None:
-        """Инициализация элементов интерфейса."""
-        self.pack(expand=True, fill="both", padx=20, pady=20)
-
-        # Таблица работников
-        self.tree = ttk.Treeview(
-            self,
-            columns=("employee_id", "full_name", "workshop", "position"),
-            show="headings"
-        )
-        self.tree.heading("employee_id", text="Табельный №")
-        self.tree.heading("full_name", text="ФИО")
-        self.tree.heading("workshop", text="Цех")
-        self.tree.heading("position", text="Должность")
-        self.tree.pack(expand=True, fill="both")
-
-        # Кнопки управления
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(pady=10)
-
-        ctk.CTkButton(btn_frame, text="Добавить", command=self._open_add_dialog).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Редактировать", command=self._open_edit_dialog).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Удалить", command=self._delete_employee).pack(side="left", padx=5)
-
-    def _load_employees(self) -> None:
-        """Загрузка данных работников из БД."""
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-
-        employees = self.db.execute_query("SELECT * FROM employees")
-        for emp in employees:
-            self.tree.insert("", "end", values=emp)
-
-    def _open_add_dialog(self) -> None:
+    def _add_item(self) -> None:
         """Открытие диалога добавления работника."""
         dialog = EmployeeDialog(self, self.db)
         if dialog.result:
-            self._load_employees()
+            self._load_data("SELECT employee_id, full_name, workshop_number, position FROM employees")
 
-    def _open_edit_dialog(self) -> None:
+    def _edit_item(self) -> None:
         """Открытие диалога редактирования работника."""
-        selected = self.tree.selection()
+        selected = self.table.selection()
         if not selected:
-            show_error("Выберите работника для редактирования!")
+            show_error("Выберите работника!")
             return
 
-        # Получение данных из таблицы с проверкой типа
-        item_data = self.tree.item(selected[0])
-        values = item_data.get("values", [])
-
-        # Явное приведение к типу List[str] или None
-        employee_data: Optional[List[str]] = values if isinstance(values, list) else None
-
-        if not employee_data:
-            show_error("Данные работника не найдены или некорректны")
-            return
-
+        employee_data = self.table.item(selected[0])["values"]
         dialog = EmployeeDialog(self, self.db, employee_data)
         if dialog.result:
-            self._load_employees()
+            self._load_data("SELECT employee_id, full_name, workshop_number, position FROM employees")
 
-    def _delete_employee(self) -> None:
+    def _delete_item(self) -> None:
         """Удаление выбранного работника."""
-        selected = self.tree.selection()
+        selected = self.table.selection()
         if not selected:
-            show_error("Выберите работника для удаления!")
+            show_error("Выберите работника!")
             return
 
-        employee_id = self.tree.item(selected[0])["values"][0]
-        self.db.execute_query("DELETE FROM employees WHERE id = ?", (employee_id,))
-        self._load_employees()
+        employee_id = self.table.item(selected[0])["values"][0]
+        self.db.execute_query("DELETE FROM employees WHERE employee_id = ?", (employee_id,))
+        self._load_data("SELECT employee_id, full_name, workshop_number, position FROM employees")
 
 
 class EmployeeDialog(ctk.CTkToplevel):
-    """Диалоговое окно для добавления/редактирования работника."""
+    """Диалог для добавления/редактирования работника."""
 
-    def __init__(self, parent: ctk.CTkFrame, db: Database, data: Optional[List] = None):
+    def __init__(self, parent: ctk.CTkFrame, db: Database, data: Optional[list] = None):
         super().__init__(parent)
         self.db = db
         self.result = False

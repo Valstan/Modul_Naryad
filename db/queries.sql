@@ -1,10 +1,10 @@
 -- Создание таблицы employees
 CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY,
+    employee_id TEXT UNIQUE NOT NULL,
     full_name TEXT NOT NULL,
     workshop_number INTEGER NOT NULL,
-    position TEXT NOT NULL,
-    employee_id TEXT UNIQUE NOT NULL
+    position TEXT NOT NULL
 );
 
 -- Создание таблицы work_orders

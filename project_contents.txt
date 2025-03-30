@@ -1,0 +1,1135 @@
+Карта проекта:
+conftest.py
+main.py
+print_proekt.py
+db\backup.py
+db\database.py
+gui\dialogs.py
+gui\employees_form.py
+gui\main_window.py
+gui\work_order_form.py
+reports\excel_report.py
+reports\html_report.py
+reports\pdf_report.py
+tests\test_database.py
+utils\validators.py
+
+--------------------------------------------------------------------------------
+
+Путь: conftest.py
+Имя файла: conftest.py
+Содержимое:
+# conftest.py (в корне проекта)
+import sys
+from pathlib import Path
+
+# Добавляем корневую директорию в путь поиска модулей
+root_dir = Path(__file__).parent
+sys.path.append(str(root_dir))
+--------------------------------------------------------------------------------
+Путь: main.py
+Имя файла: main.py
+Содержимое:
+# main.py
+import customtkinter as ctk
+from db.database import Database
+from db.backup import BackupManager
+from gui.main_window import MainWindow
+from gui.dialogs import show_error
+
+
+def main() -> None:
+    """Точка входа в программу."""
+    try:
+        # Создать резервную копию БД при запуске
+        BackupManager("work_orders.db").create_backup()
+
+        # Инициализация GUI
+        app = MainWindow()
+        app.mainloop()
+
+    except Exception as e:
+        show_error(f"Критическая ошибка: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
+--------------------------------------------------------------------------------
+Путь: print_proekt.py
+Имя файла: print_proekt.py
+Содержимое:
+import os
+
+def create_project_map(project_root):
+    project_map = []
+    for root, dirs, files in os.walk(project_root):
+        if '.venv' in dirs:
+            dirs.remove('.venv')  # Исключаем папку .venv из сканирования
+        for file in files:
+            if file.endswith('.py'):
+                file_path = os.path.join(root, file)
+                project_map.append(os.path.relpath(file_path, project_root))
+    return project_map
+
+project_root = os.getcwd()  # Корневая директория проекта
+output_file = os.path.join(project_root, "project_contents.txt")
+
+# Создаем карту проекта
+project_map = create_project_map(project_root)
+
+with open(output_file, 'w', encoding='utf-8') as f:
+    # Записываем карту проекта
+    f.write("Карта проекта:\n")
+    for file_path in project_map:
+        f.write(f"{file_path}\n")
+    f.write('\n' + '-' * 80 + '\n\n')
+
+    # Записываем содержимое файлов
+    for file_path in project_map:
+        full_path = os.path.join(project_root, file_path)
+        with open(full_path, 'r', encoding='utf-8') as src_file:
+            content = src_file.read()
+
+        f.write(f"Путь: {file_path}\n")
+        f.write(f"Имя файла: {os.path.basename(file_path)}\n")
+        f.write("Содержимое:\n")
+        f.write(content)
+        f.write('\n' + '-' * 80 + '\n')
+
+print(f"Информация о проекте сохранена в файл: {output_file}")
+--------------------------------------------------------------------------------
+Путь: db\backup.py
+Имя файла: backup.py
+Содержимое:
+# db/backup.py
+import os
+import shutil
+from pathlib import Path
+from datetime import datetime
+from typing import Optional
+
+
+class BackupManager:
+    """Управление резервными копиями БД с проверкой существования файла."""
+
+    def __init__(self, db_path: str, backup_dir: str = "backups", max_backups: int = 20):
+        self.db_path = Path(db_path)
+        self.backup_dir = Path(backup_dir)
+        self.max_backups = max_backups
+
+        if not self.db_path.exists():
+            raise FileNotFoundError(f"Файл БД {db_path} не найден!")
+
+        self._ensure_backup_dir()
+
+    def _ensure_backup_dir(self) -> None:
+        """Создать директорию для резервных копий."""
+        self.backup_dir.mkdir(exist_ok=True, parents=True)
+
+    def create_backup(self) -> Optional[str]:
+        """Создание резервной копии с обработкой ошибок."""
+        try:
+            # Генерация имени файла
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = self.backup_dir / f"backup_{timestamp}.db"
+
+            # Копирование файла
+            shutil.copy2(str(self.db_path), str(backup_path))
+            self._cleanup_old_backups()
+            return str(backup_path)
+
+        except Exception as e:
+            print(f"Ошибка резервного копирования: {str(e)}")
+            return None
+
+    def _cleanup_old_backups(self) -> None:
+        """Удаление старых копий, если превышен лимит."""
+        backups = sorted(
+            self.backup_dir.glob("backup_*.db"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=False
+        )
+
+        while len(backups) > self.max_backups:
+            old_backup = backups.pop(0)
+            os.remove(str(old_backup))
+--------------------------------------------------------------------------------
+Путь: db\database.py
+Имя файла: database.py
+Содержимое:
+# db/database.py
+import sqlite3
+from pathlib import Path
+from typing import Optional, List, Tuple
+
+class Database:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init_db()
+        return cls._instance
+
+    def _init_db(self) -> None:
+        """Инициализация БД с автоматическим созданием файла."""
+        self.db_path = Path("work_orders.db")
+        self.db_path.touch(exist_ok=True)  # Создать файл, если его нет
+        self.conn = sqlite3.connect(str(self.db_path))
+        self.cursor = self.conn.cursor()
+        self._create_tables()
+
+    def _create_tables(self) -> None:
+        """Создание таблиц из SQL-файла."""
+        sql_file = Path(__file__).parent / "queries.sql"
+        if sql_file.exists():
+            with open(sql_file, "r") as f:
+                sql = f.read()
+            self.cursor.executescript(sql)
+            self.conn.commit()
+
+    def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[Tuple]:
+        """Безопасное выполнение SQL-запроса."""
+        if params:
+            self.cursor.execute(query, params)
+        else:
+            self.cursor.execute(query)
+        self.conn.commit()
+        return self.cursor.fetchall()
+
+    def __del__(self) -> None:
+        """Закрытие соединения при удалении объекта."""
+        self.conn.close()
+--------------------------------------------------------------------------------
+Путь: gui\dialogs.py
+Имя файла: dialogs.py
+Содержимое:
+# gui/dialogs.py
+import customtkinter as ctk
+from tkcalendar import Calendar
+from datetime import datetime
+from typing import List, Optional, Tuple
+from db.database import Database
+
+
+class DatePickerDialog(ctk.CTkToplevel):
+    """Диалоговое окно выбора даты."""
+
+    def __init__(self, parent: ctk.CTkFrame) -> None:
+        super().__init__(parent)
+        self.title("Выбор даты")
+        self.geometry("300x200")
+        self.resizable(False, False)
+        self._selected_date: Optional[datetime] = None
+
+        # Календарь из tkcalendar
+        self.calendar = Calendar(self, selectmode="day", date_pattern="dd.mm.yyyy")
+        self.calendar.pack(pady=10)
+
+        # Кнопки
+        self.btn_frame = ctk.CTkFrame(self)
+        self.btn_frame.pack(pady=10)
+
+        self.ok_btn = ctk.CTkButton(self.btn_frame, text="OK", command=self._on_ok)
+        self.ok_btn.pack(side="left", padx=5)
+
+        self.cancel_btn = ctk.CTkButton(self.btn_frame, text="Отмена", command=self.destroy)
+        self.cancel_btn.pack(side="right", padx=5)
+
+    def _on_ok(self) -> None:
+        """Обработка выбора даты."""
+        try:
+            self._selected_date = datetime.strptime(self.calendar.get_date(), "%d.%m.%Y")
+            self.destroy()
+        except ValueError:
+            self._selected_date = None
+
+    def get_date(self) -> Optional[datetime]:
+        """Возвращает выбранную дату."""
+        return self._selected_date
+
+
+class WorkerSelectionDialog(ctk.CTkToplevel):
+    """Диалоговое окно выбора рабочих."""
+
+    def __init__(self, parent: ctk.CTkFrame, db: Database) -> None:
+        super().__init__(parent)
+        self.title("Выбор рабочих")
+        self.geometry("600x400")
+        self.db = db
+        self._selected_ids: List[int] = []
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        """Инициализация интерфейса."""
+        # Таблица работников
+        self.tree = ttk.Treeview(self, columns=("id", "name", "workshop"), show="headings")
+        self.tree.heading("id", text="Табельный №")
+        self.tree.heading("name", text="ФИО")
+        self.tree.heading("workshop", text="Цех")
+        self.tree.pack(expand=True, fill="both", padx=10, pady=10)
+
+        # Загрузка данных
+        workers = self.db.execute_query("SELECT employee_id, full_name, workshop_number FROM employees")
+        for worker in workers:
+            self.tree.insert("", "end", values=worker)
+
+        # Кнопки
+        self.btn_frame = ctk.CTkFrame(self)
+        self.btn_frame.pack(pady=10)
+
+        self.select_btn = ctk.CTkButton(self.btn_frame, text="Выбрать", command=self._on_select)
+        self.select_btn.pack(side="left", padx=5)
+
+        self.cancel_btn = ctk.CTkButton(self.btn_frame, text="Отмена", command=self.destroy)
+        self.cancel_btn.pack(side="right", padx=5)
+
+    def _on_select(self) -> None:
+        """Обработка выбранных рабочих."""
+        selected_items = self.tree.selection()
+        self._selected_ids = [int(self.tree.item(item)["values"][0]) for item in selected_items]
+        self.destroy()
+
+    def get_selected_workers(self) -> List[int]:
+        """Возвращает список ID выбранных рабочих."""
+        return self._selected_ids
+
+
+def show_error(message: str) -> None:
+    """Отображает окно с сообщением об ошибке."""
+    dialog = ctk.CTkToplevel()
+    dialog.title("Ошибка")
+    dialog.geometry("400x100")
+
+    label = ctk.CTkLabel(dialog, text=message, text_color="red")
+    label.pack(pady=20)
+
+    btn = ctk.CTkButton(dialog, text="OK", command=dialog.destroy)
+    btn.pack(pady=5)
+
+
+def show_info(message: str) -> None:
+    """Отображает информационное сообщение."""
+    dialog = ctk.CTkToplevel()
+    dialog.title("Информация")
+    dialog.geometry("400x100")
+
+    label = ctk.CTkLabel(dialog, text=message)
+    label.pack(pady=20)
+
+    btn = ctk.CTkButton(dialog, text="OK", command=dialog.destroy)
+    btn.pack(pady=5)
+--------------------------------------------------------------------------------
+Путь: gui\employees_form.py
+Имя файла: employees_form.py
+Содержимое:
+# gui/employees_form.py
+import customtkinter as ctk
+from tkinter import ttk
+from db.database import Database
+from gui.dialogs import show_error, show_info
+from utils.validators import validate_unique_employee_id
+from typing import Optional, List
+
+
+class EmployeesForm(ctk.CTkFrame):
+    """Форма для управления данными работников."""
+
+    def __init__(self, parent: ctk.CTkFrame, db: Database) -> None:
+        super().__init__(parent)
+        self.db = db
+        self._setup_ui()
+        self._load_employees()
+
+    def _setup_ui(self) -> None:
+        """Инициализация элементов интерфейса."""
+        self.pack(expand=True, fill="both", padx=20, pady=20)
+
+        # Таблица работников
+        self.tree = ttk.Treeview(
+            self,
+            columns=("employee_id", "full_name", "workshop", "position"),
+            show="headings"
+        )
+        self.tree.heading("employee_id", text="Табельный №")
+        self.tree.heading("full_name", text="ФИО")
+        self.tree.heading("workshop", text="Цех")
+        self.tree.heading("position", text="Должность")
+        self.tree.pack(expand=True, fill="both")
+
+        # Кнопки управления
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(pady=10)
+
+        ctk.CTkButton(btn_frame, text="Добавить", command=self._open_add_dialog).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Редактировать", command=self._open_edit_dialog).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Удалить", command=self._delete_employee).pack(side="left", padx=5)
+
+    def _load_employees(self) -> None:
+        """Загрузка данных работников из БД."""
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        employees = self.db.execute_query("SELECT * FROM employees")
+        for emp in employees:
+            self.tree.insert("", "end", values=emp)
+
+    def _open_add_dialog(self) -> None:
+        """Открытие диалога добавления работника."""
+        dialog = EmployeeDialog(self, self.db)
+        if dialog.result:
+            self._load_employees()
+
+    def _open_edit_dialog(self) -> None:
+        """Открытие диалога редактирования работника."""
+        selected = self.tree.selection()
+        if not selected:
+            show_error("Выберите работника для редактирования!")
+            return
+
+        # Получение данных из таблицы с проверкой типа
+        item_data = self.tree.item(selected[0])
+        values = item_data.get("values", [])
+
+        # Явное приведение к типу List[str] или None
+        employee_data: Optional[List[str]] = values if isinstance(values, list) else None
+
+        if not employee_data:
+            show_error("Данные работника не найдены или некорректны")
+            return
+
+        dialog = EmployeeDialog(self, self.db, employee_data)
+        if dialog.result:
+            self._load_employees()
+
+    def _delete_employee(self) -> None:
+        """Удаление выбранного работника."""
+        selected = self.tree.selection()
+        if not selected:
+            show_error("Выберите работника для удаления!")
+            return
+
+        employee_id = self.tree.item(selected[0])["values"][0]
+        self.db.execute_query("DELETE FROM employees WHERE id = ?", (employee_id,))
+        self._load_employees()
+
+
+class EmployeeDialog(ctk.CTkToplevel):
+    """Диалоговое окно для добавления/редактирования работника."""
+
+    def __init__(self, parent: ctk.CTkFrame, db: Database, data: Optional[List] = None):
+        super().__init__(parent)
+        self.db = db
+        self.result = False
+        self.title("Данные работника" if not data else "Редактирование работника")
+        self.geometry("400x300")
+
+        # Поля ввода
+        self.employee_id = ctk.CTkEntry(self, placeholder_text="Табельный №")
+        self.full_name = ctk.CTkEntry(self, placeholder_text="ФИО")
+        self.workshop = ctk.CTkEntry(self, placeholder_text="Цех")
+        self.position = ctk.CTkEntry(self, placeholder_text="Должность")
+
+        # Заполнение данных, если это редактирование
+        if data:
+            self.employee_id.insert(0, str(data[1]))  # data[1] = employee_id в таблице
+            self.full_name.insert(0, data[2])
+            self.workshop.insert(0, str(data[3]))
+            self.position.insert(0, data[4])
+
+        # Размещение элементов
+        self.employee_id.pack(pady=5)
+        self.full_name.pack(pady=5)
+        self.workshop.pack(pady=5)
+        self.position.pack(pady=5)
+
+        # Кнопки
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(pady=10)
+
+        ctk.CTkButton(btn_frame, text="Сохранить", command=self._save).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Отмена", command=self.destroy).pack(side="right", padx=5)
+
+    def _save(self) -> None:
+        """Сохранение данных работника."""
+        employee_id = self.employee_id.get().strip()
+        full_name = self.full_name.get().strip()
+        workshop = self.workshop.get().strip()
+        position = self.position.get().strip()
+
+        # Валидация
+        if not all([employee_id, full_name, workshop, position]):
+            show_error("Все поля обязательны для заполнения!")
+            return
+
+        if not validate_unique_employee_id(employee_id, self.db):
+            show_error("Табельный номер должен быть уникальным!")
+            return
+
+        # Сохранение в БД
+        query = """
+            INSERT INTO employees (employee_id, full_name, workshop_number, position)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(employee_id) DO UPDATE SET
+                full_name = excluded.full_name,
+                workshop_number = excluded.workshop_number,
+                position = excluded.position
+        """
+        self.db.execute_query(query, (employee_id, full_name, workshop, position))
+        self.result = True
+        self.destroy()
+--------------------------------------------------------------------------------
+Путь: gui\main_window.py
+Имя файла: main_window.py
+Содержимое:
+# gui/main_window.py
+from typing import Dict
+
+import customtkinter as ctk
+
+from db.database import Database
+from gui.dialogs import show_error, show_info
+from gui.employees_form import EmployeesForm
+from gui.work_order_form import WorkOrderForm
+from reports.excel_report import ExcelReportGenerator
+
+
+class MainWindow(ctk.CTk):
+    """Главное окно программы с вкладками для управления данными."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Учет сдельных работ")
+        self.geometry("1200x800")
+
+        # Инициализация БД
+        self.db: Database = Database()
+        self._load_filters_data()
+
+        # Стиль интерфейса
+        ctk.set_appearance_mode("light")
+        ctk.set_default_color_theme("green")
+
+        # Создание вкладок
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.add("Наряды")
+        self.tabview.add("Работники")
+        self.tabview.add("Отчеты")
+        self.tabview.pack(expand=True, fill="both", padx=20, pady=20)
+
+        # Загрузка содержимого вкладок
+        self._init_work_orders_tab()
+        self._init_employees_tab()
+        self._init_reports_tab()
+
+    def _load_filters_data(self) -> None:
+        """Загрузка данных для фильтров отчетов."""
+        self.contracts = self.db.execute_query("SELECT contract_code FROM contracts")
+        self.products = self.db.execute_query("SELECT name FROM products")
+
+    def _init_work_orders_tab(self) -> None:
+        """Инициализация вкладки 'Наряды'."""
+        tab = self.tabview.tab("Наряды")
+        WorkOrderForm(tab, self.db)
+
+    def _init_employees_tab(self) -> None:
+        """Инициализация вкладки 'Работники'."""
+        tab = self.tabview.tab("Работники")
+        EmployeesForm(tab, self.db)
+
+    def _init_reports_tab(self) -> None:
+        """Инициализация вкладки 'Отчеты'."""
+        tab = self.tabview.tab("Отчеты")
+
+        # Фрейм для фильтров
+        filters_frame = ctk.CTkFrame(tab)
+        filters_frame.pack(side="left", fill="y", padx=10, pady=10)
+
+        # Поля фильтров
+        ctk.CTkLabel(filters_frame, text="Фильтры отчетов", font=("Arial", 14)).pack(pady=5)
+
+        # Дата начала
+        self.start_date_entry = ctk.CTkEntry(filters_frame, placeholder_text="Дата начала (ДД.ММ.ГГГГ)")
+        self.start_date_entry.pack(pady=5)
+
+        # Дата окончания
+        self.end_date_entry = ctk.CTkEntry(filters_frame, placeholder_text="Дата окончания (ДД.ММ.ГГГГ)")
+        self.end_date_entry.pack(pady=5)
+
+        # Контракты
+        self.contract_combobox = ctk.CTkComboBox(
+            filters_frame,
+            values=[c[0] for c in self.contracts],
+            placeholder_text="Выберите контракт"
+        )
+        self.contract_combobox.pack(pady=5)
+
+        # Изделия
+        self.product_combobox = ctk.CTkComboBox(
+            filters_frame,
+            values=[p[0] for p in self.products],
+            placeholder_text="Выберите изделие"
+        )
+        self.product_combobox.pack(pady=5)
+
+        # Фрейм для кнопок экспорта
+        export_frame = ctk.CTkFrame(tab)
+        export_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+
+        ctk.CTkLabel(export_frame, text="Экспорт отчетов", font=("Arial", 14)).pack(pady=10)
+
+        # Кнопки
+        ctk.CTkButton(export_frame, text="Excel", command=self._export_excel).pack(pady=5, fill="x")
+        ctk.CTkButton(export_frame, text="PDF", command=self._export_pdf).pack(pady=5, fill="x")
+        ctk.CTkButton(export_frame, text="HTML", command=self._export_html).pack(pady=5, fill="x")
+
+    def _get_filters(self) -> Dict:
+        """Возвращает параметры фильтрации."""
+        return {
+            "start_date": self.start_date_entry.get(),
+            "end_date": self.end_date_entry.get(),
+            "contract_code": self.contract_combobox.get(),
+            "product": self.product_combobox.get()
+        }
+
+    def _export_excel(self) -> None:
+        """Экспорт отчета в Excel."""
+        try:
+            generator = ExcelReportGenerator(self.db)
+            path = generator.generate(self._get_filters())
+            show_info(f"Excel-отчет сохранен:\n{path}")
+        except Exception as e:
+            show_error(f"Ошибка: {str(e)}")
+
+    def _export_pdf(self) -> None:
+        """Экспорт отчета в PDF."""
+        try:
+            from reports.pdf_report import PDFReportGenerator
+            generator = PDFReportGenerator(self.db)
+            path = generator.generate(self._get_filters())
+            if path.startswith("Ошибка"):
+                show_error(path)
+            else:
+                show_info(f"PDF-отчет сохранен:\n{path}")
+        except Exception as e:
+            show_error(f"Ошибка: {str(e)}")
+
+    def _export_html(self) -> None:
+        """Экспорт отчета в HTML."""
+        try:
+            from reports.html_report import HTMLReportGenerator
+            generator = HTMLReportGenerator(self.db)
+            path = generator.generate(self._get_filters())
+            if path.startswith("Ошибка"):
+                show_error(path)
+            else:
+                show_info(f"HTML-отчет сохранен:\n{path}")
+        except Exception as e:
+            show_error(f"Ошибка: {str(e)}")
+
+
+if __name__ == "__main__":
+    try:
+        app = MainWindow()
+        app.mainloop()
+    except Exception as e:
+        show_error(f"Ошибка запуска: {str(e)}")
+--------------------------------------------------------------------------------
+Путь: gui\work_order_form.py
+Имя файла: work_order_form.py
+Содержимое:
+# gui/work_order_form.py
+from datetime import datetime
+from tkinter import ttk
+from typing import List, Dict
+
+import customtkinter as ctk
+
+from db.database import Database
+from gui.dialogs import DatePickerDialog, WorkerSelectionDialog, show_error
+from utils.validators import validate_order_data
+
+
+class WorkOrderForm(ctk.CTkFrame):
+    """Форма для создания и редактирования нарядов работ."""
+
+    def __init__(self, parent: ctk.CTkFrame, db: Database) -> None:
+        super().__init__(parent)
+        self.db = db
+        self._current_workers: List[int] = []
+        self._current_works: List[Dict] = []
+        self._setup_ui()
+        self._load_initial_data()
+
+    def _setup_ui(self) -> None:
+        """Инициализация элементов интерфейса."""
+        self.pack(expand=True, fill="both", padx=20, pady=20)
+
+        # Поля ввода
+        self.order_id_label = ctk.CTkLabel(self, text="Наряд №:")
+        self.order_id_label.grid(row=0, column=0, sticky="w")
+        self.order_id_value = ctk.CTkLabel(self, text="Автоматически")
+        self.order_id_value.grid(row=0, column=1, sticky="w")
+
+        # Дата наряда
+        self.date_label = ctk.CTkLabel(self, text="Дата:")
+        self.date_label.grid(row=1, column=0, sticky="w")
+        self.date_entry = ctk.CTkEntry(self)
+        self.date_entry.insert(0, datetime.now().strftime("%d.%m.%Y"))
+        self.date_entry.grid(row=1, column=1, sticky="ew")
+        self.date_picker_btn = ctk.CTkButton(self, text="📅", width=30, command=self._open_date_picker)
+        self.date_picker_btn.grid(row=1, column=2, padx=5)
+
+        # Выбор рабочих
+        self.workers_btn = ctk.CTkButton(self, text="Выбрать рабочих", command=self._select_workers)
+        self.workers_btn.grid(row=2, column=0, columnspan=3, pady=10, sticky="ew")
+
+        # Таблица видов работ
+        self.works_table = ttk.Treeview(self, columns=("work_type", "quantity", "amount"), show="headings")
+        self.works_table.heading("work_type", text="Вид работы")
+        self.works_table.heading("quantity", text="Количество")
+        self.works_table.heading("amount", text="Сумма")
+        self.works_table.grid(row=3, column=0, columnspan=3, sticky="nsew")
+
+        # Кнопки добавления/удаления работ
+        self.add_work_btn = ctk.CTkButton(self, text="+ Добавить работу", command=self._add_work)
+        self.add_work_btn.grid(row=4, column=0, pady=10)
+        self.remove_work_btn = ctk.CTkButton(self, text="- Удалить работу", command=self._remove_work)
+        self.remove_work_btn.grid(row=4, column=1, pady=10)
+
+        # Итоговая сумма
+        self.total_label = ctk.CTkLabel(self, text="Итого:")
+        self.total_label.grid(row=5, column=0, sticky="w")
+        self.total_value = ctk.CTkLabel(self, text="0.00 ₽")
+        self.total_value.grid(row=5, column=1, sticky="w")
+
+        # Кнопка сохранения
+        self.save_btn = ctk.CTkButton(self, text="Сохранить наряд", command=self._save_order)
+        self.save_btn.grid(row=6, column=0, columnspan=3, pady=20, sticky="ew")
+
+    def _load_initial_data(self) -> None:
+        """Загрузка данных для выпадающих списков."""
+        self.products = self.db.execute_query("SELECT id, name FROM products")
+        self.contracts = self.db.execute_query("SELECT id, contract_code FROM contracts")
+
+    def _open_date_picker(self) -> None:
+        """Открытие диалога выбора даты."""
+        dialog = DatePickerDialog(self)
+        date = dialog.get_date()
+        if date:
+            self.date_entry.delete(0, "end")
+            self.date_entry.insert(0, date.strftime("%d.%m.%Y"))
+
+    def _select_workers(self) -> None:
+        """Выбор рабочих из списка."""
+        dialog = WorkerSelectionDialog(self, self.db)
+        workers = dialog.get_selected_workers()
+        if workers:
+            self._current_workers = workers
+            self.workers_btn.configure(text=f"Выбрано: {len(workers)} рабочих")
+
+    def _add_work(self) -> None:
+        """Добавление вида работы в таблицу."""
+        # Заглушка: здесь будет диалог выбора работы
+        work_type = ("Монтаж проводки", 150.0)  # Пример данных
+        self._current_works.append({"type_id": 1, "quantity": 5, "price": work_type[1]})
+        self._update_works_table()
+
+    def _update_works_table(self) -> None:
+        """Обновление таблицы работ."""
+        for row in self.works_table.get_children():
+            self.works_table.delete(row)
+
+        total = 0.0
+        for work in self._current_works:
+            amount = work["quantity"] * work["price"]
+            self.works_table.insert("", "end", values=(work["type_id"], work["quantity"], f"{amount:.2f} ₽"))
+            total += amount
+
+        self.total_value.configure(text=f"{total:.2f} ₽")
+
+    def _save_order(self) -> None:
+        is_valid, error_msg = validate_order_data(
+            self.date_entry.get(),
+            self._current_workers,
+            self._current_works,
+            self.db
+        )
+
+        if not is_valid:
+            show_error(error_msg)
+            return
+
+# Пример использования диалоговых окон и валидации
+--------------------------------------------------------------------------------
+Путь: reports\excel_report.py
+Имя файла: excel_report.py
+Содержимое:
+# reports/excel_report.py
+import pandas as pd
+from db.database import Database
+from pathlib import Path
+from typing import Optional, Dict, List
+from datetime import datetime
+
+
+class ExcelReportGenerator:
+    """Генератор отчетов в формате Excel."""
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+        self._output_dir = Path("reports/excel")
+        self._output_dir.mkdir(exist_ok=True, parents=True)
+
+    def generate(
+            self,
+            filters: Optional[Dict] = None,
+            filename: Optional[str] = None
+    ) -> str:
+        """Генерирует отчет с фильтрацией данных."""
+        query = """
+            SELECT 
+                wo.id AS order_id,
+                wo.order_date,
+                p.name AS product,
+                c.contract_code,
+                SUM(owt.amount) AS total_amount,
+                GROUP_CONCAT(e.full_name, ', ') AS workers
+            FROM work_orders wo
+            LEFT JOIN products p ON wo.product_id = p.id
+            LEFT JOIN contracts c ON wo.contract_id = c.id
+            LEFT JOIN order_workers ow ON wo.id = ow.order_id
+            LEFT JOIN employees e ON ow.worker_id = e.id
+            LEFT JOIN order_work_types owt ON wo.id = owt.order_id
+            GROUP BY wo.id
+        """
+        data = self.db.execute_query(query)
+
+        # Преобразование в DataFrame
+        df = pd.DataFrame(
+            data,
+            columns=["order_id", "order_date", "product", "contract_code", "total_amount", "workers"]
+        )
+
+        # Применение фильтров
+        if filters:
+            df = self._apply_filters(df, filters)
+
+        # Генерация имени файла
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"report_{timestamp}.xlsx"
+
+        # Сохранение в Excel
+        output_path = self._output_dir / filename
+        df.to_excel(output_path, index=False)
+        return str(output_path)
+
+    def _apply_filters(self, df: pd.DataFrame, filters: Dict) -> pd.DataFrame:
+        """Применяет фильтры к данным."""
+        if "start_date" in filters:
+            df = df[df["order_date"] >= filters["start_date"]]
+        if "contract_code" in filters:
+            df = df[df["contract_code"] == filters["contract_code"]]
+        # Добавьте другие фильтры по аналогии
+        return df
+--------------------------------------------------------------------------------
+Путь: reports\html_report.py
+Имя файла: html_report.py
+Содержимое:
+# reports/html_report.py
+from db.database import Database
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, Dict
+
+class HTMLReportGenerator:
+    """Генератор отчетов в формате HTML."""
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+        self._output_dir = Path("reports/html")
+        self._output_dir.mkdir(exist_ok=True, parents=True)
+
+    def generate(self, filters: Optional[Dict] = None, filename: Optional[str] = None) -> str:
+        """Генерирует HTML-отчет с фильтрацией данных."""
+        try:
+            data = self._fetch_data(filters)
+            if not data:
+                return "Нет данных для отчета."
+
+            # Формирование HTML-таблицы
+            html_content = [
+                "<!DOCTYPE html>",
+                "<html>",
+                "<head>",
+                "<title>Отчет по нарядам</title>",
+                "<style>",
+                "table { border-collapse: collapse; width: 100%; }",
+                "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
+                "th { background-color: #f2f2f2; }",
+                "</style>",
+                "</head>",
+                "<body>",
+                "<h1>Отчет по нарядам работ</h1>",
+                "<table>",
+                "<tr><th>Наряд №</th><th>Дата</th><th>Изделие</th><th>Контракт</th><th>Сумма</th></tr>"
+            ]
+
+            for row in data:
+                html_content.append(f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td></tr>")
+
+            html_content.extend(["</table>", "</body>", "</html>"])
+
+            # Сохранение файла
+            if not filename:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"report_{timestamp}.html"
+
+            output_path = self._output_dir / filename
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(html_content))
+
+            return str(output_path)
+
+        except Exception as e:
+            return f"Ошибка: {str(e)}"
+
+    def _fetch_data(self, filters: Optional[Dict]) -> list:
+        """Загружает данные из БД с учетом фильтров."""
+        query = """  
+            SELECT  
+                wo.id AS order_id,  
+                wo.order_date,  
+                p.name AS product,  
+                c.contract_code,  
+                SUM(owt.amount) AS total_amount  
+            FROM work_orders wo  
+            LEFT JOIN products p ON wo.product_id = p.id  
+            LEFT JOIN contracts c ON wo.contract_id = c.id  
+            LEFT JOIN order_work_types owt ON wo.id = owt.order_id  
+            GROUP BY wo.id  
+        """
+        raw_data = self.db.execute_query(query)
+        return raw_data
+--------------------------------------------------------------------------------
+Путь: reports\pdf_report.py
+Имя файла: pdf_report.py
+Содержимое:
+# reports/pdf_report.py
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from db.database import Database
+from pathlib import Path
+from datetime import datetime
+
+
+class PDFReportGenerator:
+    """Генератор отчетов в формате PDF."""
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+        self._output_dir = Path("reports/pdf")
+        self._output_dir.mkdir(exist_ok=True, parents=True)
+        self.styles = getSampleStyleSheet()
+
+    def generate(self, filters: dict = None, filename: str = None) -> str:
+        """Генерирует PDF-отчет с фильтрацией данных."""
+        try:
+            # Запрос данных из БД
+            data = self._fetch_data(filters)
+            if not data:
+                return "Нет данных для отчета."
+
+            # Создание PDF
+            if not filename:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"report_{timestamp}.pdf"
+
+            output_path = self._output_dir / filename
+            c = canvas.Canvas(str(output_path), pagesize=A4)
+
+            # Заголовок
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(50, 800, "Отчет по нарядам работ")
+
+            # Таблица с данными
+            table = Table(data, colWidths=[100, 80, 120, 100, 80])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black)
+            ]))
+
+            # Размещение таблицы на странице
+            table.wrapOn(c, 400, 600)
+            table.drawOn(c, 50, 650)
+
+            c.save()
+            return str(output_path)
+
+        except Exception as e:
+            return f"Ошибка: {str(e)}"
+
+    def _fetch_data(self, filters: dict) -> list:
+        """Возвращает данные для отчета с учетом фильтров."""
+        query = """
+            SELECT 
+                wo.id AS order_id,
+                wo.order_date,
+                p.name AS product,
+                c.contract_code,
+                SUM(owt.amount) AS total_amount
+            FROM work_orders wo
+            LEFT JOIN products p ON wo.product_id = p.id
+            LEFT JOIN contracts c ON wo.contract_id = c.id
+            LEFT JOIN order_work_types owt ON wo.id = owt.order_id
+            GROUP BY wo.id
+        """
+        raw_data = self.db.execute_query(query)
+
+        # Заголовки таблицы
+        data = [["Наряд №", "Дата", "Изделие", "Контракт", "Сумма"]]
+        for row in raw_data:
+            data.append([str(item) for item in row])
+
+        return data
+--------------------------------------------------------------------------------
+Путь: tests\test_database.py
+Имя файла: test_database.py
+Содержимое:
+import pytest
+from pathlib import Path
+from db.database import Database
+from db.backup import BackupManager
+
+TEST_DB_PATH = "test_work_orders.db"
+
+
+@pytest.fixture(scope="function")
+def test_db():
+    """Фикстура для создания и удаления тестовой БД перед каждым тестом."""
+    db = Database()
+    db.db_path = TEST_DB_PATH  # Переопределяем путь для тестов
+
+    # Создаем тестовые таблицы
+    db.execute_query("""
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY,
+            employee_id TEXT UNIQUE NOT NULL,
+            full_name TEXT NOT NULL,
+            workshop_number INTEGER NOT NULL,
+            position TEXT NOT NULL
+        )
+    """)
+    yield db
+    # Удаляем тестовую БД после завершения теста
+    Path(TEST_DB_PATH).unlink(missing_ok=True)
+
+
+def test_create_tables(test_db):
+    """Проверка создания таблиц."""
+    test_db.execute_query(
+        "INSERT INTO employees (employee_id, full_name, workshop_number, position) VALUES (?, ?, ?, ?)",
+        ("001", "Иванов Иван", 1, "Инженер")
+    )
+    result = test_db.execute_query("SELECT * FROM employees")
+    assert len(result) == 1, "Данные не добавлены в таблицу."
+
+
+def test_backup_manager(test_db):
+    """Проверка создания резервных копий."""
+    # Явная проверка существования БД
+    assert Path(TEST_DB_PATH).exists(), "Тестовая БД не создана!"
+
+    manager = BackupManager(TEST_DB_PATH, backup_dir="test_backups", max_backups=2)
+    backup_path = manager.create_backup()
+
+    assert backup_path is not None, "Резервная копия не создана."
+    assert Path(backup_path).exists(), "Файл резервной копии отсутствует."
+
+    # Очистка тестовых данных
+    for file in Path("test_backups").glob("*.db"):
+        file.unlink()
+    Path("test_backups").rmdir()
+--------------------------------------------------------------------------------
+Путь: utils\validators.py
+Имя файла: validators.py
+Содержимое:
+# utils/validators.py
+from datetime import datetime
+from db.database import Database
+from typing import Optional
+
+
+def validate_date(date_str: str) -> bool:
+    """Проверяет корректность даты в формате DD.MM.YYYY."""
+    try:
+        datetime.strptime(date_str, "%d.%m.%Y")
+        return True
+    except ValueError:
+        return False
+
+
+def validate_positive_integer(value: str) -> bool:
+    """Проверяет, что значение является положительным целым числом."""
+    try:
+        number = int(value)
+        return number > 0
+    except ValueError:
+        return False
+
+
+def validate_unique_contract_code(code: str, db: Database) -> bool:
+    """Проверяет уникальность шифра контракта."""
+    result = db.execute_query(
+        "SELECT COUNT(*) FROM contracts WHERE contract_code = ?", (code,)
+    )
+    return result[0][0] == 0 if result else False
+
+
+def validate_unique_work_type_name(name: str, db: Database) -> bool:
+    """Проверяет уникальность наименования вида работ."""
+    result = db.execute_query(
+        "SELECT COUNT(*) FROM work_types WHERE name = ?", (name,)
+    )
+    return result[0][0] == 0 if result else False
+
+
+def validate_order_data(
+        date: str, workers: list, works: list, db: Database
+) -> tuple[bool, Optional[str]]:
+    """Комплексная проверка данных наряда. Возвращает (успех, сообщение об ошибке)."""
+    errors = []
+
+    if not validate_date(date):
+        errors.append("Неверный формат даты. Используйте ДД.ММ.ГГГГ")
+
+    if not workers:
+        errors.append("Выберите хотя бы одного рабочего")
+
+    for work in works:
+        if not validate_positive_integer(str(work["quantity"])):
+            errors.append("Количество работ должно быть положительным числом")
+
+    if errors:
+        return (False, "\n".join(errors))
+    return (True, None)
+
+
+def validate_unique_employee_id(employee_id: str, db: Database) -> bool:
+    """Проверяет уникальность табельного номера."""
+    result = db.execute_query(
+        "SELECT COUNT(*) FROM employees WHERE employee_id = ?", (employee_id,)
+    )
+    return result[0][0] == 0 if result else False
+
+--------------------------------------------------------------------------------

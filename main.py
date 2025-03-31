@@ -1,9 +1,7 @@
 # main.py
-import customtkinter as ctk
-from db.database import Database
 from db.backup import BackupManager
-from gui.main_window import MainWindow
 from gui.dialogs import show_error
+from gui.main_window import MainWindow
 
 
 def main() -> None:

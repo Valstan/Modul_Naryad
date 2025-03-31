@@ -1,4 +1,6 @@
 # gui/dialogs.py
+from tkinter import ttk
+
 import customtkinter as ctk
 from tkcalendar import Calendar
 from datetime import datetime

@@ -1,7 +1,11 @@
 # db/database.py
+import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
+
+logger = logging.getLogger(__name__)
+
 
 class Database:
     """Singleton для управления подключением к SQLite."""
@@ -28,12 +32,26 @@ class Database:
             with open(sql_file, "r") as f:
                 sql = f.read()
             cursor = self.conn.cursor()
-            cursor.executescript(sql)
-            self.conn.commit()
-            cursor.close()
+            try:
+                cursor.executescript(sql)
+                self.conn.commit()
+            except sqlite3.Error as e:
+                logger.error(f"Ошибка создания таблиц: {str(e)}")
+                self.conn.rollback()
+            finally:
+                cursor.close()
 
-    def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[Tuple]:
-        """Безопасное выполнение SQL-запроса с поддержкой транзакций."""
+    def execute_query(
+            self,
+            query: str,
+            params: Optional[Tuple[Any, ...]] = None
+    ) -> Optional[List[Tuple[Any, ...]]]:
+        """
+        Безопасное выполнение SQL-запроса с поддержкой транзакций.
+
+        Returns:
+            Список кортежей с результатами запроса или None при ошибке.
+        """
         cursor = self.conn.cursor()
         try:
             cursor.execute("BEGIN TRANSACTION")
@@ -41,14 +59,17 @@ class Database:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
+            result = cursor.fetchall()
             self.conn.commit()
-            return cursor.fetchall()
+            return result
         except sqlite3.Error as e:
             self.conn.rollback()
-            raise RuntimeError(f"Ошибка БД: {str(e)}")
+            logger.error(f"Ошибка выполнения запроса: {str(e)}")
+            return None  # Явный возврат None при ошибке
         finally:
             cursor.close()
 
     def __del__(self) -> None:
         """Закрытие соединения при удалении объекта."""
-        self.conn.close()
+        if hasattr(self, "conn"):
+            self.conn.close()

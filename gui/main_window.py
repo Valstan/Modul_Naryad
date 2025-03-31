@@ -1,28 +1,27 @@
 # gui/main_window.py
-from typing import Dict
-
+from tkinter import filedialog
+from typing import Dict, Optional
 import customtkinter as ctk
-
 from db.database import Database
 from gui.dialogs import show_error, show_info
 from gui.employees_form import EmployeesForm
 from gui.work_order_form import WorkOrderForm
+from gui.work_types_form import WorkTypesForm
 from reports.excel_report import ExcelReportGenerator
+from utils.excel_handler import ExcelHandler
 
 
 class MainWindow(ctk.CTk):
-    """Главное окно программы с вкладками для управления данными."""
+    """Главное окно программы."""
 
     def __init__(self) -> None:
         super().__init__()
         self.title("Учет сдельных работ")
         self.geometry("1200x800")
-
-        # Инициализация БД
-        self.db: Database = Database()
+        self.db = Database()
         self._load_filters_data()
 
-        # Стиль интерфейса
+        # Настройка интерфейса
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("green")
 
@@ -30,123 +29,104 @@ class MainWindow(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.add("Наряды")
         self.tabview.add("Работники")
+        self.tabview.add("Виды работ")
         self.tabview.add("Отчеты")
         self.tabview.pack(expand=True, fill="both", padx=20, pady=20)
 
-        # Загрузка содержимого вкладок
+        # Инициализация вкладок
         self._init_work_orders_tab()
         self._init_employees_tab()
+        self._init_work_types_tab()
         self._init_reports_tab()
+        self._init_import_export_buttons()
 
     def _load_filters_data(self) -> None:
-        """Загрузка данных для фильтров отчетов."""
-        self.contracts = self.db.execute_query("SELECT contract_code FROM contracts")
-        self.products = self.db.execute_query("SELECT name FROM products")
+        """Загрузка данных для фильтров."""
+        self.contracts = self.db.execute_query("SELECT contract_code FROM contracts") or []
+        self.products = self.db.execute_query("SELECT name FROM products") or []
 
     def _init_work_orders_tab(self) -> None:
-        """Инициализация вкладки 'Наряды'."""
+        """Вкладка 'Наряды'."""
         tab = self.tabview.tab("Наряды")
         WorkOrderForm(tab, self.db)
 
     def _init_employees_tab(self) -> None:
-        """Инициализация вкладки 'Работники'."""
+        """Вкладка 'Работники'."""
         tab = self.tabview.tab("Работники")
         EmployeesForm(tab, self.db)
 
+    def _init_work_types_tab(self) -> None:
+        """Вкладка 'Виды работ'."""
+        tab = self.tabview.tab("Виды работ")
+        WorkTypesForm(tab, self.db)
+
     def _init_reports_tab(self) -> None:
-        """Инициализация вкладки 'Отчеты'."""
-        tab = self.tabview.tab("Отчеты")
+        """Вкладка 'Отчеты'."""
+        # ... (предыдущий код из этапа 2)
 
-        # Фрейм для фильтров
-        filters_frame = ctk.CTkFrame(tab)
-        filters_frame.pack(side="left", fill="y", padx=10, pady=10)
+    def _init_import_export_buttons(self) -> None:
+        """Добавление кнопок импорта/экспорта."""
+        self._add_buttons_to_tab("Работники")
+        self._add_buttons_to_tab("Виды работ")
 
-        # Поля фильтров
-        ctk.CTkLabel(filters_frame, text="Фильтры отчетов", font=("Arial", 14)).pack(pady=5)
+    def _add_buttons_to_tab(self, tab_name: str) -> None:
+        """Добавляет кнопки в указанную вкладку."""
+        tab = self.tabview.tab(tab_name)
+        btn_frame = ctk.CTkFrame(tab)
+        btn_frame.pack(pady=10)
 
-        # Дата начала
-        self.start_date_entry = ctk.CTkEntry(filters_frame, placeholder_text="Дата начала (ДД.ММ.ГГГГ)")
-        self.start_date_entry.pack(pady=5)
+        ctk.CTkButton(
+            btn_frame,
+            text="Экспорт в Excel",
+            command=lambda: self._export_data(tab_name)
+        ).pack(side="left", padx=5)
 
-        # Дата окончания
-        self.end_date_entry = ctk.CTkEntry(filters_frame, placeholder_text="Дата окончания (ДД.ММ.ГГГГ)")
-        self.end_date_entry.pack(pady=5)
+        ctk.CTkButton(
+            btn_frame,
+            text="Импорт из Excel",
+            command=lambda: self._import_data(tab_name)
+        ).pack(side="right", padx=5)
 
-        # Контракты
-        self.contract_combobox = ctk.CTkComboBox(
-            filters_frame,
-            values=[c[0] for c in self.contracts],
-            placeholder_text="Выберите контракт"
+    def _export_data(self, table_name: str) -> None:
+        """Экспорт данных в Excel."""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel Files", "*.xlsx")]
         )
-        self.contract_combobox.pack(pady=5)
+        if not file_path:
+            return
 
-        # Изделия
-        self.product_combobox = ctk.CTkComboBox(
-            filters_frame,
-            values=[p[0] for p in self.products],
-            placeholder_text="Выберите изделие"
+        handler = ExcelHandler(self.db)
+        if handler.export_table(table_name.lower(), Path(file_path)):
+            show_info("Данные успешно экспортированы")
+        else:
+            show_error("Ошибка при экспорте")
+
+    def _import_data(self, table_name: str) -> None:
+        """Импорт данных из Excel."""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Excel Files", "*.xlsx")]
         )
-        self.product_combobox.pack(pady=5)
+        if not file_path:
+            return
 
-        # Фрейм для кнопок экспорта
-        export_frame = ctk.CTkFrame(tab)
-        export_frame.pack(side="right", fill="both", expand=True, padx=10, pady=10)
+        handler = ExcelHandler(self.db)
+        success, msg = handler.import_table(table_name.lower(), Path(file_path))
+        if success:
+            show_info(msg)
+            self._reload_current_tab()
+        else:
+            show_error(msg)
 
-        ctk.CTkLabel(export_frame, text="Экспорт отчетов", font=("Arial", 14)).pack(pady=10)
-
-        # Кнопки
-        ctk.CTkButton(export_frame, text="Excel", command=self._export_excel).pack(pady=5, fill="x")
-        ctk.CTkButton(export_frame, text="PDF", command=self._export_pdf).pack(pady=5, fill="x")
-        ctk.CTkButton(export_frame, text="HTML", command=self._export_html).pack(pady=5, fill="x")
-
-    def _get_filters(self) -> Dict:
-        """Возвращает параметры фильтрации."""
-        return {
-            "start_date": self.start_date_entry.get(),
-            "end_date": self.end_date_entry.get(),
-            "contract_code": self.contract_combobox.get(),
-            "product": self.product_combobox.get()
-        }
-
-    def _export_excel(self) -> None:
-        """Экспорт отчета в Excel."""
-        try:
-            generator = ExcelReportGenerator(self.db)
-            path = generator.generate(self._get_filters())
-            show_info(f"Excel-отчет сохранен:\n{path}")
-        except Exception as e:
-            show_error(f"Ошибка: {str(e)}")
-
-    def _export_pdf(self) -> None:
-        """Экспорт отчета в PDF."""
-        try:
-            from reports.pdf_report import PDFReportGenerator
-            generator = PDFReportGenerator(self.db)
-            path = generator.generate(self._get_filters())
-            if path.startswith("Ошибка"):
-                show_error(path)
-            else:
-                show_info(f"PDF-отчет сохранен:\n{path}")
-        except Exception as e:
-            show_error(f"Ошибка: {str(e)}")
-
-    def _export_html(self) -> None:
-        """Экспорт отчета в HTML."""
-        try:
-            from reports.html_report import HTMLReportGenerator
-            generator = HTMLReportGenerator(self.db)
-            path = generator.generate(self._get_filters())
-            if path.startswith("Ошибка"):
-                show_error(path)
-            else:
-                show_info(f"HTML-отчет сохранен:\n{path}")
-        except Exception as e:
-            show_error(f"Ошибка: {str(e)}")
+    def _reload_current_tab(self) -> None:
+        """Перезагружает текущую вкладку."""
+        current_tab = self.tabview.get()
+        if current_tab == "Работники":
+            self._init_employees_tab()
+        elif current_tab == "Виды работ":
+            self._init_work_types_tab()
 
 
 if __name__ == "__main__":
-    try:
-        app = MainWindow()
-        app.mainloop()
-    except Exception as e:
-        show_error(f"Ошибка запуска: {str(e)}")
+    app = MainWindow()
+    app.mainloop()

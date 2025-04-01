@@ -1,0 +1,113 @@
+2025-04-01 23:27:17,308 - __main__ - INFO - Starting application initialization
+2025-04-01 23:27:17,308 - __main__ - CRITICAL - Critical error: Файл БД work_orders.db не найден!
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\main.py", line 18, in main
+    BackupManager("work_orders.db").create_backup()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PycharmProjects\Modul_Naryad\db\backup.py", line 18, in __init__
+    raise FileNotFoundError(f"Файл БД {db_path} не найден!")
+FileNotFoundError: Файл БД work_orders.db не найден!
+2025-04-01 23:48:08,815 - __main__ - INFO - Инициализация приложения
+2025-04-01 23:48:08,830 - db.database - INFO - База данных инициализирована: work_orders.db
+2025-04-01 23:48:10,305 - db.backup - INFO - Создана резервная копия: backups\backup_20250401_234810.db
+2025-04-01 23:48:10,384 - gui.main_window - INFO - Инициализация главного окна
+2025-04-01 23:48:10,384 - gui.main_window - INFO - Загрузка данных для фильтров
+2025-04-01 23:48:10,384 - gui.main_window - WARNING - Пустой результат для запроса: SELECT contract_code FROM contracts
+2025-04-01 23:48:10,384 - gui.main_window - WARNING - Пустой результат для запроса: SELECT name FROM products
+2025-04-01 23:48:10,447 - gui.main_window - ERROR - Ошибка инициализации интерфейса: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-01 23:48:10,463 - gui.main_window - CRITICAL - Ошибка инициализации: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 33, in __init__
+    self._init_ui()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-01 23:48:10,479 - __main__ - CRITICAL - Критическая ошибка: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\main.py", line 27, in main
+    app = MainWindow(db)
+          ^^^^^^^^^^^^^^
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 33, in __init__
+    self._init_ui()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-01 23:50:14,844 - __main__ - INFO - Инициализация приложения
+2025-04-01 23:50:14,844 - db.database - INFO - База данных инициализирована: work_orders.db
+2025-04-01 23:50:14,855 - db.backup - INFO - Создана резервная копия: backups\backup_20250401_235014.db
+2025-04-01 23:50:14,923 - gui.main_window - INFO - Инициализация главного окна
+2025-04-01 23:50:14,923 - gui.main_window - INFO - Загрузка данных для фильтров
+2025-04-01 23:50:14,923 - gui.main_window - WARNING - Пустой результат для запроса: SELECT contract_code FROM contracts
+2025-04-01 23:50:14,923 - gui.main_window - WARNING - Пустой результат для запроса: SELECT name FROM products
+2025-04-01 23:50:14,970 - gui.main_window - ERROR - Ошибка инициализации интерфейса: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-01 23:50:14,986 - gui.main_window - CRITICAL - Ошибка инициализации: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 33, in __init__
+    self._init_ui()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-01 23:50:15,001 - __main__ - CRITICAL - Критическая ошибка: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\main.py", line 27, in main
+    app = MainWindow(db)
+          ^^^^^^^^^^^^^^
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 33, in __init__
+    self._init_ui()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 57, in _init_ui
+    self._create_tabs()
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 72, in _create_tabs
+    self._init_work_orders_tab()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Valstan\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute '_init_work_orders_tab'
+2025-04-02 00:11:01,647 - __main__ - INFO - Запуск приложения
+2025-04-02 00:11:01,647 - db.database - INFO - База данных инициализирована: work_orders.db
+2025-04-02 00:11:01,663 - db.backup - INFO - Создана резервная копия: backups\backup_20250402_001101.db
+2025-04-02 00:11:01,741 - gui.main_window - INFO - Инициализация главного окна
+2025-04-02 00:11:11,478 - reports.excel_report - WARNING - Нет данных для отчета
+2025-04-02 00:16:30,064 - __main__ - INFO - Запуск приложения
+2025-04-02 00:16:30,064 - db.database - INFO - База данных инициализирована: work_orders.db
+2025-04-02 00:16:30,064 - db.backup - INFO - Создана резервная копия: backups\backup_20250402_001630.db
+2025-04-02 00:16:30,158 - gui.main_window - INFO - Инициализация главного окна
+2025-04-02 00:16:42,796 - reports.excel_report - WARNING - Нет данных для отчета

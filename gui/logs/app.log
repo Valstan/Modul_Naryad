@@ -1,0 +1,7 @@
+2025-04-01 23:57:36,563 - __main__ - INFO - Завершение работы приложения
+2025-04-01 23:57:38,320 - __main__ - CRITICAL - Критическая ошибка: MainWindow.__init__() missing 1 required positional argument: 'db'
+Traceback (most recent call last):
+  File "D:\PycharmProjects\Modul_Naryad\gui\main_window.py", line 131, in <module>
+    app = MainWindow()
+          ^^^^^^^^^^^^
+TypeError: MainWindow.__init__() missing 1 required positional argument: 'db'

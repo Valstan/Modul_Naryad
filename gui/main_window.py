@@ -16,200 +16,99 @@ from utils.excel_handler import ExcelHandler
 
 logger = logging.getLogger(__name__)
 
-
 class MainWindow(ctk.CTk):
-    """Главное окно программы с обработкой ошибок и проверкой данных."""
+    """Главное окно программы."""
 
-    def __init__(self) -> None:
+    def __init__(self, db: Database) -> None:
         super().__init__()
         self.title("Учет сдельных работ")
         self.geometry("1200x800")
-        self.db = Database()
-        self._load_filters_data()
+        self.db = db
 
-        # Настройка интерфейса
+        try:
+            logger.info("Инициализация главного окна")
+            self._configure_theme()
+            self._init_ui()
+            self._load_filters_data()
+        except Exception as e:
+            logger.critical(f"Ошибка инициализации: {str(e)}", exc_info=True)
+            show_error("Не удалось запустить приложение")
+            raise
+
+    def _configure_theme(self) -> None:
+        """Настройка темы интерфейса."""
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("green")
-        self._init_ui()
 
     def _init_ui(self) -> None:
-        """Инициализация пользовательского интерфейса с обработкой ошибок."""
-        try:
-            self.tabview = ctk.CTkTabview(self)
-            self._create_tabs()
-            self._init_import_export_buttons()
-        except Exception as e:
-            logger.error(f"Ошибка инициализации интерфейса: {str(e)}")
-            show_error("Критическая ошибка при создании интерфейса")
-
-    def _create_tabs(self) -> None:
-        """Создание вкладок с обработкой исключений."""
-        tabs = ["Наряды", "Работники", "Виды работ", "Отчеты"]
-        for tab in tabs:
-            self.tabview.add(tab)
+        """Инициализация интерфейса."""
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.add("Наряды")
+        self.tabview.add("Работники")
+        self.tabview.add("Виды работ")
+        self.tabview.add("Отчеты")
         self.tabview.pack(expand=True, fill="both", padx=20, pady=20)
 
+        # Инициализация вкладок
         self._init_work_orders_tab()
         self._init_employees_tab()
         self._init_work_types_tab()
         self._init_reports_tab()
 
-    def _load_filters_data(self) -> None:
-        """Загрузка данных для фильтров с проверкой на ошибки."""
-        try:
-            self.contracts = self._safe_query("SELECT contract_code FROM contracts") or []
-            self.products = self._safe_query("SELECT name FROM products") or []
-        except Exception as e:
-            logger.error(f"Ошибка загрузки фильтров: {str(e)}")
-            show_error("Ошибка загрузки справочников")
-
-    def _safe_query(self, query: str) -> Optional[list]:
-        """Безопасное выполнение запроса с обработкой ошибок."""
-        result = self.db.execute_query(query)
-        if result is None:
-            logger.warning(f"Пустой результат для запроса: {query}")
-        return result
-
     def _init_work_orders_tab(self) -> None:
         """Инициализация вкладки с нарядами."""
-        try:
-            tab = self.tabview.tab("Наряды")
-            WorkOrderForm(tab, self.db)
-        except Exception as e:
-            logger.error(f"Ошибка инициализации вкладки нарядов: {str(e)}")
-            show_error("Ошибка создания формы нарядов")
+        tab = self.tabview.tab("Наряды")
+        WorkOrderForm(tab, self.db)
 
     def _init_employees_tab(self) -> None:
         """Инициализация вкладки с работниками."""
-        try:
-            tab = self.tabview.tab("Работники")
-            EmployeesForm(tab, self.db)
-        except Exception as e:
-            logger.error(f"Ошибка инициализации вкладки работников: {str(e)}")
-            show_error("Ошибка создания формы работников")
+        tab = self.tabview.tab("Работники")
+        EmployeesForm(tab, self.db)
 
     def _init_work_types_tab(self) -> None:
         """Инициализация вкладки с видами работ."""
-        try:
-            tab = self.tabview.tab("Виды работ")
-            WorkTypesForm(tab, self.db)
-        except Exception as e:
-            logger.error(f"Ошибка инициализации вкладки видов работ: {str(e)}")
-            show_error("Ошибка создания формы видов работ")
+        tab = self.tabview.tab("Виды работ")
+        WorkTypesForm(tab, self.db)
 
     def _init_reports_tab(self) -> None:
-        """Инициализация вкладки отчетов с базовой функциональностью."""
-        try:
-            tab = self.tabview.tab("Отчеты")
-            btn_frame = ctk.CTkFrame(tab)
-            btn_frame.pack(pady=20)
+        """Инициализация вкладки отчетов."""
+        tab = self.tabview.tab("Отчеты")
+        btn_frame = ctk.CTkFrame(tab)
+        btn_frame.pack(pady=20)
 
-            ctk.CTkButton(
-                btn_frame,
-                text="Сформировать Excel-отчет",
-                command=self._generate_excel_report
-            ).pack(side="left", padx=10)
+        ctk.CTkButton(
+            btn_frame,
+            text="Сформировать Excel-отчет",
+            command=self._generate_excel_report
+        ).pack(side="left", padx=10)
 
-            ctk.CTkButton(
-                btn_frame,
-                text="Сформировать PDF-отчет",
-                command=self._generate_pdf_report
-            ).pack(side="left", padx=10)
-        except Exception as e:
-            logger.error(f"Ошибка инициализации вкладки отчетов: {str(e)}")
+        ctk.CTkButton(
+            btn_frame,
+            text="Сформировать PDF-отчет",
+            command=self._generate_pdf_report
+        ).pack(side="left", padx=10)
+
+    def _load_filters_data(self) -> None:
+        """Загрузка данных для фильтров."""
+        self.contracts = self.db.execute_query("SELECT contract_code FROM contracts") or []
+        self.products = self.db.execute_query("SELECT name FROM products") or []
 
     def _generate_excel_report(self) -> None:
-        """Генерация Excel-отчета с обработкой ошибок."""
+        """Генерация Excel-отчета."""
         try:
             generator = ExcelReportGenerator(self.db)
             report_path = generator.generate()
             if report_path:
                 show_info(f"Отчет сохранен: {report_path}")
         except Exception as e:
-            logger.error(f"Ошибка генерации Excel-отчета: {str(e)}")
+            logger.error(f"Ошибка генерации отчета: {str(e)}")
             show_error("Ошибка создания отчета")
 
     def _generate_pdf_report(self) -> None:
         """Заглушка для генерации PDF-отчета."""
         show_info("PDF-отчеты временно недоступны")
 
-    def _init_import_export_buttons(self) -> None:
-        """Добавление кнопок импорта/экспорта с проверкой прав доступа."""
-        self._add_buttons_to_tab("Работники")
-        self._add_buttons_to_tab("Виды работ")
-
-    def _add_buttons_to_tab(self, tab_name: str) -> None:
-        """Создание кнопок для операций с Excel."""
-        try:
-            tab = self.tabview.tab(tab_name)
-            btn_frame = ctk.CTkFrame(tab)
-            btn_frame.pack(pady=10)
-
-            ctk.CTkButton(
-                btn_frame,
-                text="Экспорт в Excel",
-                command=lambda: self._export_data(tab_name)
-            ).pack(side="left", padx=5)
-
-            ctk.CTkButton(
-                btn_frame,
-                text="Импорт из Excel",
-                command=lambda: self._import_data(tab_name)
-            ).pack(side="right", padx=5)
-        except Exception as e:
-            logger.error(f"Ошибка создания кнопок для {tab_name}: {str(e)}")
-
-    def _export_data(self, table_name: str) -> None:
-        """Экспорт данных с обработкой исключений."""
-        try:
-            file_path = filedialog.asksaveasfilename(
-                defaultextension=".xlsx",
-                filetypes=[("Excel Files", "*.xlsx")]
-            )
-            if not file_path:
-                return
-
-            handler = ExcelHandler(self.db)
-            if handler.export_table(table_name.lower(), Path(file_path)):
-                show_info("Данные успешно экспортированы")
-            else:
-                show_error("Ошибка при экспорте")
-        except Exception as e:
-            logger.error(f"Ошибка экспорта данных: {str(e)}")
-            show_error("Ошибка при экспорте данных")
-
-    def _import_data(self, table_name: str) -> None:
-        """Импорт данных с проверкой формата файла."""
-        try:
-            file_path = filedialog.askopenfilename(
-                filetypes=[("Excel Files", "*.xlsx")]
-            )
-            if not file_path:
-                return
-
-            handler = ExcelHandler(self.db)
-            success, msg = handler.import_table(table_name.lower(), Path(file_path))
-            if success:
-                show_info(msg)
-                self._reload_current_tab()
-            else:
-                show_error(msg)
-        except Exception as e:
-            logger.error(f"Ошибка импорта данных: {str(e)}")
-            show_error("Ошибка при импорте данных")
-
-    def _reload_current_tab(self) -> None:
-        """Перезагрузка текущей вкладки с обновлением данных."""
-        current_tab = self.tabview.get()
-        try:
-            if current_tab == "Работники":
-                self._init_employees_tab()
-            elif current_tab == "Виды работ":
-                self._init_work_types_tab()
-        except Exception as e:
-            logger.error(f"Ошибка перезагрузки вкладки: {str(e)}")
-
-
-if __name__ == "__main__":
-    app = MainWindow()
-    app.mainloop()
+    def __del__(self) -> None:
+        """Завершение работы."""
+        if hasattr(self, "db"):
+            self.db.conn.close()

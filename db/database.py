@@ -18,10 +18,11 @@ class Database:
         return cls._instance
 
     def _init_db(self) -> None:
-        """Инициализация БД с автоматическим созданием файла и таблиц."""
+        """Инициализация БД с гарантированным созданием файла."""
         self.db_path = Path("work_orders.db")
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.execute("PRAGMA foreign_keys = ON")
+        logger.info(f"База данных инициализирована: {self.db_path}")
         self._create_tables()
 
     def _create_tables(self) -> None:

@@ -2,6 +2,7 @@
 import sys
 import logging
 from db.backup import BackupManager
+from db.database import Database
 from gui.dialogs import show_error
 from gui.main_window import MainWindow
 from utils.logger import configure_logging
@@ -14,19 +15,14 @@ def main() -> None:
     configure_logging()
 
     try:
-        logger.info("Starting application initialization")
-        BackupManager("work_orders.db").create_backup()
-
-        logger.debug("Creating main window")
-        app = MainWindow()
-        app.protocol("WM_DELETE_WINDOW", app.quit)
-
-        logger.info("Starting main loop")
+        logger.info("Запуск приложения")
+        db = Database()
+        BackupManager(str(db.db_path)).create_backup()
+        app = MainWindow(db)
         app.mainloop()
-
     except Exception as e:
-        logger.critical(f"Critical error: {str(e)}", exc_info=True)
-        show_error(f"Критическая ошибка: {str(e)}")
+        logger.critical(f"Критическая ошибка: {str(e)}", exc_info=True)
+        show_error(f"Ошибка запуска: {str(e)}")
         sys.exit(1)
 
 

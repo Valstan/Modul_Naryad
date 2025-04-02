@@ -38,6 +38,7 @@ sys.path.append(str(root_dir))
 # main.py
 import sys
 import logging
+import tkinter as tk
 from db.backup import BackupManager
 from db.database import Database
 from gui.dialogs import show_error
@@ -48,27 +49,36 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    """Точка входа в программу."""
-    configure_logging()
-
+    """Точка входа в программу с улучшенной обработкой ошибок."""
     try:
+        configure_logging()
         logger.info("Инициализация приложения")
 
-        # Инициализация БД (создаст файл если не существует)
+        # Инициализация базы данных
         db = Database()
+        BackupManager(str(db.db_path)).create_backup()
 
-        # Создание резервной копии после инициализации БД
-        BackupManager(db.db_path).create_backup()
-
-        # Создание главного окна с передачей экземпляра БД
+        # Инициализация GUI
+        logger.debug("Создание главного окна")
         app = MainWindow(db)
-        app.protocol("WM_DELETE_WINDOW", app.quit)
+
+        # Явный запуск главного цикла
+        logger.info("Запуск основного цикла приложения")
         app.mainloop()
 
+        logger.info("Приложение завершило работу")
+
     except Exception as e:
-        logger.critical(f"Критическая ошибка: {str(e)}", exc_info=True)
-        show_error(f"Ошибка запуска: {str(e)}")
+        logger.critical(f"Критическая ошибка инициализации: {str(e)}", exc_info=True)
+        show_error(f"Фатальная ошибка: {str(e)}\nПодробности в логах")
         sys.exit(1)
+
+    finally:
+        if 'app' in locals():
+            try:
+                app.destroy()
+            except tk.TclError:
+                pass
 
 
 if __name__ == "__main__":
@@ -325,13 +335,13 @@ class Database:
 Содержимое:
 # db/queries.py
 REPORT_BASE_QUERY = """
-SELECT
+SELECT 
     wo.id AS order_id,
-    wo.order_date,
-    p.name AS product,
-    c.contract_code,
-    SUM(owt.amount) AS total_amount,
-    GROUP_CONCAT(e.full_name, ', ') AS workers
+    COALESCE(wo.order_date, 'Нет данных') AS order_date,
+    COALESCE(p.name, 'Не указано') AS product,
+    COALESCE(c.contract_code, 'Без контракта') AS contract_code,
+    COALESCE(SUM(owt.amount), 0) AS total_amount,
+    COALESCE(GROUP_CONCAT(e.full_name, ', '), 'Не выбраны') AS workers
 FROM work_orders wo
 LEFT JOIN products p ON wo.product_id = p.id
 LEFT JOIN contracts c ON wo.contract_id = c.id
@@ -678,123 +688,102 @@ from utils.excel_handler import ExcelHandler
 
 logger = logging.getLogger(__name__)
 
-
 class MainWindow(ctk.CTk):
-    """Главное окно программы с внешним экземпляром БД."""
+    """Главное окно программы."""
 
-    def __init__(self, db: Database) -> None:  # Принимаем БД извне
+    def __init__(self, db: Database) -> None:
         super().__init__()
         self.title("Учет сдельных работ")
         self.geometry("1200x800")
-        self.db = db  # Используем переданный экземпляр БД
+        self.db = db
 
         try:
             logger.info("Инициализация главного окна")
-            self._load_filters_data()
             self._configure_theme()
             self._init_ui()
-
+            self._load_filters_data()
         except Exception as e:
             logger.critical(f"Ошибка инициализации: {str(e)}", exc_info=True)
-            show_error("Не удалось инициализировать приложение")
+            show_error("Не удалось запустить приложение")
             raise
-
-    def _init_database(self) -> None:
-        """Инициализация подключения к базе данных с логированием."""
-        logger.debug("Подключение к базе данных")
-        self.db = Database()
-        if not Path("work_orders.db").exists():
-            logger.warning("База данных не найдена, создается новая")
 
     def _configure_theme(self) -> None:
         """Настройка темы интерфейса."""
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("green")
-        logger.debug("Тема интерфейса настроена")
 
     def _init_ui(self) -> None:
-        """Инициализация пользовательского интерфейса с обработкой ошибок."""
-        try:
-            self.tabview = ctk.CTkTabview(self)
-            self._create_tabs()
-            self._init_import_export_buttons()
-            logger.debug("Основные элементы интерфейса созданы")
-        except Exception as e:
-            logger.error(f"Ошибка инициализации интерфейса: {str(e)}", exc_info=True)
-            raise
-
-    def _create_tabs(self) -> None:
-        """Создание вкладок приложения с логированием."""
-        tabs = ["Наряды", "Работники", "Виды работ", "Отчеты"]
-        for tab in tabs:
-            self.tabview.add(tab)
-            logger.debug(f"Добавлена вкладка: {tab}")
+        """Инициализация интерфейса."""
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.add("Наряды")
+        self.tabview.add("Работники")
+        self.tabview.add("Виды работ")
+        self.tabview.add("Отчеты")
         self.tabview.pack(expand=True, fill="both", padx=20, pady=20)
 
+        # Инициализация вкладок
         self._init_work_orders_tab()
         self._init_employees_tab()
         self._init_work_types_tab()
         self._init_reports_tab()
 
+    def _init_work_orders_tab(self) -> None:
+        """Инициализация вкладки с нарядами."""
+        tab = self.tabview.tab("Наряды")
+        WorkOrderForm(tab, self.db)
+
+    def _init_employees_tab(self) -> None:
+        """Инициализация вкладки с работниками."""
+        tab = self.tabview.tab("Работники")
+        EmployeesForm(tab, self.db)
+
+    def _init_work_types_tab(self) -> None:
+        """Инициализация вкладки с видами работ."""
+        tab = self.tabview.tab("Виды работ")
+        WorkTypesForm(tab, self.db)
+
+    def _init_reports_tab(self) -> None:
+        """Инициализация вкладки отчетов."""
+        tab = self.tabview.tab("Отчеты")
+        btn_frame = ctk.CTkFrame(tab)
+        btn_frame.pack(pady=20)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="Сформировать Excel-отчет",
+            command=self._generate_excel_report
+        ).pack(side="left", padx=10)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="Сформировать PDF-отчет",
+            command=self._generate_pdf_report
+        ).pack(side="left", padx=10)
+
     def _load_filters_data(self) -> None:
-        """Загрузка данных для фильтров с обработкой ошибок."""
-        try:
-            logger.info("Загрузка данных для фильтров")
-            self.contracts = self._safe_query("SELECT contract_code FROM contracts") or []
-            self.products = self._safe_query("SELECT name FROM products") or []
-            logger.debug(f"Загружено {len(self.contracts)} контрактов и {len(self.products)} изделий")
-        except Exception as e:
-            logger.error(f"Ошибка загрузки фильтров: {str(e)}", exc_info=True)
-            show_error("Ошибка загрузки справочников")
-
-    def _safe_query(self, query: str) -> Optional[list]:
-        """Безопасное выполнение запроса с логированием."""
-        try:
-            result = self.db.execute_query(query)
-            if not result:
-                logger.warning(f"Пустой результат для запроса: {query}")
-            return result
-        except Exception as e:
-            logger.error(f"Ошибка выполнения запроса: {query} | {str(e)}", exc_info=True)
-            return None
-
-    # Остальные методы остаются без изменений, но с добавлением логирования
-    # Полный код с остальными методами доступен по запросу
+        """Загрузка данных для фильтров."""
+        self.contracts = self.db.execute_query("SELECT contract_code FROM contracts") or []
+        self.products = self.db.execute_query("SELECT name FROM products") or []
 
     def _generate_excel_report(self) -> None:
-        """Генерация Excel-отчета с расширенным логированием."""
+        """Генерация Excel-отчета."""
         try:
-            logger.info("Начало генерации Excel-отчета")
             generator = ExcelReportGenerator(self.db)
             report_path = generator.generate()
             if report_path:
-                logger.info(f"Отчет успешно создан: {report_path}")
                 show_info(f"Отчет сохранен: {report_path}")
-            else:
-                logger.warning("Не удалось создать отчет (нет данных)")
-                show_error("Нет данных для отчета")
         except Exception as e:
-            logger.error(f"Ошибка генерации отчета: {str(e)}", exc_info=True)
+            logger.error(f"Ошибка генерации отчета: {str(e)}")
             show_error("Ошибка создания отчета")
 
+    def _generate_pdf_report(self) -> None:
+        """Заглушка для генерации PDF-отчета."""
+        show_info("PDF-отчеты временно недоступны")
+
     def __del__(self) -> None:
-        """Завершение работы с логированием."""
-        logger.info("Завершение работы приложения")
+        """Завершение работы."""
         if hasattr(self, "db"):
             self.db.conn.close()
-
-
-if __name__ == "__main__":
-    import sys
-    from utils.logger import configure_logging
-
-    configure_logging()
-    try:
-        app = MainWindow()
-        app.mainloop()
-    except Exception as e:
-        logger.critical(f"Критическая ошибка: {str(e)}", exc_info=True)
-        sys.exit(1)
 --------------------------------------------------------------------------------
 Путь: gui\work_order_form.py
 Имя файла: work_order_form.py
@@ -1304,13 +1293,15 @@ class WorkTypeDialog(ctk.CTkToplevel):
 Имя файла: excel_report.py
 Содержимое:
 # reports/excel_report.py
-import pandas as pd
-from pathlib import Path
+import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Optional, Dict
+
+import pandas as pd
+
 from db.database import Database
 from db.queries import REPORT_BASE_QUERY
-from typing import Optional, Dict
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -1346,25 +1337,43 @@ class ExcelReportGenerator:
             # Применение фильтров
             if filters:
                 df = self._apply_filters(df, filters)
+                if df.empty:
+                    logger.warning("Данные не соответствуют фильтрам")
+                    return None
 
             # Генерация имени файла
             output_path = self._get_output_path(filename)
-            df.to_excel(output_path, index=False)
+            df.to_excel(output_path, index=False, engine="openpyxl")
             return str(output_path)
 
         except Exception as e:
-            logger.error(f"Ошибка генерации Excel-отчета: {str(e)}")
+            logger.error(f"Ошибка генерации Excel-отчета: {str(e)}", exc_info=True)
             return None
 
     def _apply_filters(self, df: pd.DataFrame, filters: Dict) -> pd.DataFrame:
         """Применяет фильтры к данным."""
-        # Реализация фильтрации...
+        for column, value in filters.items():
+            if column not in df.columns:
+                continue
+
+            if isinstance(value, (list, tuple)):
+                df = df[df[column].isin(value)]
+            elif isinstance(value, dict):
+                # Для диапазонов значений (например, дат)
+                if "start" in value and "end" in value:
+                    df = df[df[column].between(value["start"], value["end"])]
+            else:
+                df = df[df[column] == value]
+
         return df
 
     def _get_output_path(self, filename: Optional[str]) -> Path:
         """Генерирует путь к файлу."""
         if filename:
+            if not filename.endswith(".xlsx"):
+                filename += ".xlsx"
             return self._output_dir / filename
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return self._output_dir / f"report_{timestamp}.xlsx"
 --------------------------------------------------------------------------------
@@ -1790,21 +1799,42 @@ class ExcelHandler:
 # utils/logger.py
 import logging
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 
-def configure_logging():
-    """Конфигурация системы логирования для всего приложения"""
+def configure_logging() -> None:
+    """Конфигурация расширенной системы логирования для всего приложения."""
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
+    # Форматтер с дополнительной информацией
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+    )
+
+    # Обработчик для файла с ротацией
+    file_handler = RotatingFileHandler(
+        filename=log_dir / "app.log",
+        maxBytes=5*1024*1024,  # 5 MB
+        backupCount=10,
+        encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+
+    # Консольный обработчик только для ошибок
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_handler.setFormatter(formatter)
+
+    # Базовая конфигурация
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_dir / "app.log"),
-            logging.StreamHandler()
-        ]
+        handlers=[file_handler, console_handler],
     )
+
+    # Отключаем логирование от сторонних библиотек
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.captureWarnings(True)
 --------------------------------------------------------------------------------
 Путь: utils\validators.py

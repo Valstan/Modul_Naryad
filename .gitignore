@@ -6,3 +6,6 @@ venv/
 .coverage
 .cache/
 .ipynb_checkpoints
+/backups/
+work_orders.db
+/logs/

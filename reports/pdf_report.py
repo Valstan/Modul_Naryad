@@ -3,7 +3,6 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
-
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -15,7 +14,6 @@ from reportlab.platypus import (
     Paragraph,
     Spacer
 )
-
 from db.database import Database
 from db.queries import WORK_ORDERS_FOR_PDF_HTML
 from utils.validators import validate_date_range
@@ -51,16 +49,13 @@ class PDFReportGenerator:
                 leftMargin=2 * cm,
                 rightMargin=2 * cm
             )
-
             elements = []
             self._add_header(elements)
             self._add_filters_info(elements, filters)
             self._add_data_table(elements, data)
             self._add_footer(elements)
-
             doc.build(elements)
             return str(output_path)
-
         except Exception as e:
             logger.error(f"Ошибка генерации PDF: {str(e)}")
             return None
@@ -69,7 +64,6 @@ class PDFReportGenerator:
         """Получение данных с применением фильтров."""
         query = WORK_ORDERS_FOR_PDF_HTML
         params = []
-
         if filters:
             where_clauses = []
             for key, value in filters.items():
@@ -77,19 +71,18 @@ class PDFReportGenerator:
                     if key == "date_range":
                         if validate_date_range(value["start"], value["end"]):
                             where_clauses.append(
-                                "order_date BETWEEN ? AND ?"
+                                "wo.order_date BETWEEN ? AND ?"
                             )
                             params.extend([value["start"], value["end"]])
                     elif key == "contract":
-                        where_clauses.append("contract_code = ?")
+                        where_clauses.append("c.contract_code = ?")
                         params.append(value)
                     elif key == "product":
-                        where_clauses.append("product_name = ?")
+                        where_clauses.append("p.name = ?")
                         params.append(value)
                     elif key == "worker":
-                        where_clauses.append("workers LIKE ?")
+                        where_clauses.append("e.full_name LIKE ?")
                         params.append(f"%{value}%")
-
             if where_clauses:
                 query += " WHERE " + " AND ".join(where_clauses)
 
@@ -141,16 +134,15 @@ class PDFReportGenerator:
             "Сумма",
             "Рабочие"
         ]
-
         table_data = [headers]
         for row in data:
             formatted_row = [
                 str(row[0]),
                 datetime.strptime(row[1], "%Y-%m-%d").strftime("%d.%m.%Y"),
-                row[2],
-                row[3],
+                row[2] if row[2] else "Не указано",
+                row[3] if row[3] else "Без контракта",
                 f"{row[4]:,.2f} ₽".replace(",", " "),
-                ", ".join(row[5].split(", "))
+                ", ".join(row[5].split(", ")) if row[5] else "Не выбраны"
             ]
             table_data.append(formatted_row)
 
@@ -159,7 +151,6 @@ class PDFReportGenerator:
             colWidths=[2 * cm, 2.5 * cm, 4 * cm, 4 * cm, 3 * cm, 6 * cm],
             repeatRows=1
         )
-
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
@@ -170,7 +161,6 @@ class PDFReportGenerator:
             ("GRID", (0, 0), (-1, -1), 1, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
-
         elements.append(table)
 
     def _add_footer(self, elements: List) -> None:

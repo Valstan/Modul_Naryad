@@ -1,14 +1,14 @@
 # gui/work_order_form.py
 import logging
 from datetime import datetime
+from tkinter import ttk
 from typing import List, Dict, Optional, Tuple
 
 import customtkinter as ctk
-from tkinter import ttk
 
 from db.database import Database
 from gui.dialogs import DatePickerDialog, WorkerSelectionDialog, show_error, show_info
-from utils.validators import validate_date, validate_positive_number
+from utils.validators import validate_date
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +25,15 @@ class WorkOrderForm(ctk.CTkFrame):
         self._load_initial_data()
 
     def _setup_ui(self) -> None:
-        """Инициализация элементов интерфейса с улучшенной компоновкой."""
+        """Полная переработка интерфейса с улучшенной компоновкой."""
         self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(5, weight=1)
 
         # Заголовок формы
-        ctk.CTkLabel(self, text="Новый наряд работ", font=("Arial", 14, "bold")).grid(
-            row=0, column=0, columnspan=3, pady=10, sticky="w"
-        )
+        header = ctk.CTkLabel(self, text="Новый наряд работ", font=("Arial", 14, "bold"))
+        header.grid(row=0, column=0, columnspan=3, pady=(10, 20), sticky="ew")
 
-        # Поля ввода
+        # Основные поля
         self._create_input_fields()
         self._create_workers_section()
         self._create_works_table()
@@ -42,230 +41,273 @@ class WorkOrderForm(ctk.CTkFrame):
         self._create_control_buttons()
 
     def _create_input_fields(self) -> None:
-        """Создание полей для основных данных наряда."""
+        """Переработанные поля ввода с валидацией."""
         # Дата наряда
-        ctk.CTkLabel(self, text="Дата:").grid(row=1, column=0, sticky="e", padx=5)
-        self.date_entry = ctk.CTkEntry(self)
+        date_frame = ctk.CTkFrame(self)
+        date_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        date_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(date_frame, text="Дата:").pack(side="left", padx=(0, 5))
+        self.date_entry = ctk.CTkEntry(date_frame)
         self.date_entry.insert(0, datetime.now().strftime("%d.%m.%Y"))
-        self.date_entry.grid(row=1, column=1, sticky="ew", padx=5)
+        self.date_entry.pack(side="left", fill="x", expand=True)
 
         ctk.CTkButton(
-            self,
+            date_frame,
             text="📅",
             width=30,
             command=self._open_date_picker
-        ).grid(row=1, column=2, padx=5)
+        ).pack(side="right", padx=(5, 0))
 
         # Выбор изделия и контракта
         self._create_combobox("Изделие:", "products", row=2)
         self._create_combobox("Контракт:", "contracts", row=3)
 
     def _create_combobox(self, label: str, table: str, row: int) -> None:
-        """Создание выпадающего списка для связанных сущностей."""
-        ctk.CTkLabel(self, text=label).grid(row=row, column=0, sticky="e", padx=5)
-        values = self._get_combobox_values(table)
-        combobox = ctk.CTkComboBox(self, values=values)
-        combobox.grid(row=row, column=1, sticky="ew", padx=5, pady=2)
+        """Улучшенные выпадающие списки с обновлением."""
+        frame = ctk.CTkFrame(self)
+        frame.grid(row=row, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(frame, text=f"{label}").pack(side="left", padx=(0, 5))
+        combobox = ctk.CTkComboBox(frame, values=[])
+        combobox.pack(side="left", fill="x", expand=True, padx=(0, 5))
         setattr(self, f"{table}_combobox", combobox)
 
-    def _get_combobox_values(self, table: str) -> List[str]:
-        """Загрузка данных для выпадающих списков."""
+        # Кнопка обновления
+        ctk.CTkButton(
+            frame,
+            text="🔄",
+            width=30,
+            command=lambda: self._refresh_combobox(table)
+        ).pack(side="right")
+
+    def _refresh_combobox(self, table: str) -> None:
+        """Обновление данных выпадающего списка."""
         try:
             if table == "products":
-                result = self.db.execute_query("SELECT id, name FROM products")
+                data = self.db.execute_query("SELECT id, name FROM products")
             elif table == "contracts":
-                result = self.db.execute_query("SELECT id, contract_code FROM contracts")
-            return [f"{row[0]} - {row[1]}" for row in result] if result else []
+                data = self.db.execute_query("SELECT id, contract_code FROM contracts")
+            values = [f"{row[0]} - {row[1]}" for row in data] if data else []
+            getattr(self, f"{table}_combobox").configure(values=values)
         except Exception as e:
-            logger.error(f"Ошибка загрузки {table}: {str(e)}")
-            return []
-
-    def _load_initial_data(self) -> None:
-        """Инициализация данных для выпадающих списков."""
-        try:
-            products = self.db.execute_query("SELECT id, name FROM products")
-            contracts = self.db.execute_query("SELECT id, contract_code FROM contracts")
-
-            self.products_combobox.configure(
-                values=[f"{p[0]} - {p[1]}" for p in products] if products else []
-            )
-            self.contracts_combobox.configure(
-                values=[f"{c[0]} - {c[1]}" for c in contracts] if contracts else []
-            )
-        except Exception as e:
-            logger.error(f"Ошибка загрузки данных: {str(e)}")
-            show_error("Ошибка загрузки справочников")
+            logger.error(f"Ошибка обновления {table}: {str(e)}")
+            show_error(f"Не удалось обновить список {table}")
 
     def _create_workers_section(self) -> None:
-        """Секция выбора рабочих бригады."""
+        """Улучшенный выбор рабочих с подсказкой."""
+        self.worker_frame = ctk.CTkFrame(self)
+        self.worker_frame.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+
         self.workers_btn = ctk.CTkButton(
-            self,
+            self.worker_frame,
             text="Выбрать рабочих (0)",
             command=self._select_workers
         )
-        self.workers_btn.grid(row=4, column=0, columnspan=3, pady=10, sticky="ew")
+        self.workers_btn.pack(side="left", padx=5, pady=5, fill="x", expand=True)
+
+        ctk.CTkLabel(
+            self.worker_frame,
+            text="* Минимум 1 рабочий",
+            text_color="gray"
+        ).pack(side="right", padx=5)
 
     def _create_works_table(self) -> None:
-        """Таблица видов работ с улучшенным стилем."""
-        columns = ("Вид работы", "Количество", "Цена", "Сумма")
+        """Переработанная таблица работ с полосой прокрутки."""
+        table_frame = ctk.CTkFrame(self)
+        table_frame.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
+
+        columns = ("Вид работы", "Количество", "Цена за ед.", "Сумма")
         self.works_table = ttk.Treeview(
-            self,
+            table_frame,
             columns=columns,
             show="headings",
-            style="Custom.Treeview",
-            height=6
+            style="Custom.Treeview"
         )
 
         for col in columns:
             self.works_table.heading(col, text=col)
             self.works_table.column(col, width=120, anchor="center")
 
-        self.works_table.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=10)
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.works_table.yview)
+        self.works_table.configure(yscrollcommand=scrollbar.set)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.works_table.grid(row=0, column=0, sticky="nsew")
 
     def _create_total_section(self) -> None:
-        """Секция отображения итоговой суммы."""
-        ctk.CTkLabel(self, text="Итого:").grid(row=6, column=0, sticky="e", padx=5)
-        self.total_value = ctk.CTkLabel(self, text="0.00 ₽")
-        self.total_value.grid(row=6, column=1, sticky="w", padx=5)
+        """Отображение итоговой суммы с валютой."""
+        total_frame = ctk.CTkFrame(self)
+        total_frame.grid(row=6, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        total_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(total_frame, text="Итого:").pack(side="left", padx=(10, 5))
+        self.total_value = ctk.CTkLabel(total_frame, text="0.00 ₽", font=("Arial", 12, "bold"))
+        self.total_value.pack(side="left")
 
     def _create_control_buttons(self) -> None:
-        """Кнопки управления нарядом."""
+        """Группа кнопок управления с разделителями."""
         btn_frame = ctk.CTkFrame(self)
-        btn_frame.grid(row=7, column=0, columnspan=3, pady=10)
+        btn_frame.grid(row=7, column=0, columnspan=3, padx=5, pady=(10, 5), sticky="ew")
+        btn_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
         ctk.CTkButton(
             btn_frame,
             text="Добавить работу",
             command=self._add_work
-        ).pack(side="left", padx=5)
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
         ctk.CTkButton(
             btn_frame,
             text="Удалить работу",
             command=self._remove_work
-        ).pack(side="left", padx=5)
+        ).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         ctk.CTkButton(
             btn_frame,
             text="Сохранить наряд",
             command=self._save_order
-        ).pack(side="right", padx=5)
+        ).grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+
+    def _load_initial_data(self) -> None:
+        """Загрузка начальных данных с обработкой ошибок."""
+        try:
+            self._refresh_combobox("products")
+            self._refresh_combobox("contracts")
+        except Exception as e:
+            logger.error(f"Ошибка загрузки данных: {str(e)}")
+            show_error("Ошибка загрузки справочников")
 
     def _open_date_picker(self) -> None:
-        """Обработчик выбора даты с валидацией."""
+        """Улучшенный выбор даты с валидацией."""
         dialog = DatePickerDialog(self)
-        date = dialog.get_date()
-        if date:
-            self.date_entry.delete(0, "end")
-            self.date_entry.insert(0, date.strftime("%d.%m.%Y"))
+        self.wait_window(dialog)
+        selected_date = dialog.get_date()
+        if selected_date:
+            formatted_date = selected_date.strftime("%d.%m.%Y")
+            if validate_date(formatted_date):
+                self.date_entry.delete(0, "end")
+                self.date_entry.insert(0, formatted_date)
+            else:
+                show_error("Неверный формат даты")
 
     def _select_workers(self) -> None:
-        """Выбор рабочих с обновлением счетчика."""
+        """Выбор рабочих с обновлением интерфейса."""
         dialog = WorkerSelectionDialog(self, self.db)
+        self.wait_window(dialog)
         workers = dialog.get_selected_workers()
         if workers:
             self._current_workers = workers
             self.workers_btn.configure(text=f"Выбрано: {len(workers)} рабочих")
 
     def _add_work(self) -> None:
-        """Добавление вида работы через диалоговое окно."""
+        """Добавление работы с выбором из существующих."""
         try:
             work_types = self.db.execute_query(
-                "SELECT id, name, price FROM work_types"
+                "SELECT id, name, price, unit FROM work_types"
             )
             if not work_types:
                 show_error("Нет доступных видов работ")
                 return
 
             dialog = WorkTypeSelectionDialog(self, work_types)
+            self.wait_window(dialog)
             selected = dialog.get_selected_work()
+
             if selected:
                 self._current_works.append({
                     "type_id": selected[0],
                     "name": selected[1],
                     "price": selected[2],
-                    "quantity": selected[3]
+                    "quantity": selected[3],
+                    "unit": selected[4]
                 })
                 self._update_works_table()
+
         except Exception as e:
             logger.error(f"Ошибка добавления работы: {str(e)}")
-            show_error("Ошибка при выборе вида работ")
+            show_error("Ошибка при добавлении работы")
 
     def _update_works_table(self) -> None:
-        """Обновление таблицы с пересчетом сумм."""
-        for row in self.works_table.get_children():
-            self.works_table.delete(row)
+        """Обновление таблицы работ с пересчетом сумм."""
+        try:
+            self.works_table.delete(*self.works_table.get_children())
+            total = 0.0
 
-        total = 0.0
-        for work in self._current_works:
-            amount = work["price"] * work["quantity"]
-            self.works_table.insert("", "end", values=(
-                work["name"],
-                work["quantity"],
-                f"{work['price']:.2f} ₽",
-                f"{amount:.2f} ₽"
-            ))
-            total += amount
+            for work in self._current_works:
+                amount = work["price"] * work["quantity"]
+                total += amount
+                self.works_table.insert("", "end", values=(
+                    work["name"],
+                    f"{work['quantity']} {work['unit']}",
+                    f"{work['price']:.2f} ₽",
+                    f"{amount:.2f} ₽"
+                ))
 
-        self.total_value.configure(text=f"{total:.2f} ₽")
+            self.total_value.configure(text=f"{total:.2f} ₽")
+
+        except Exception as e:
+            logger.error(f"Ошибка обновления таблицы: {str(e)}")
+            show_error("Ошибка отображения работ")
 
     def _remove_work(self) -> None:
-        """Удаление выбранной работы из таблицы."""
+        """Удаление работы с подтверждением."""
         selected = self.works_table.selection()
         if not selected:
             show_error("Выберите работу для удаления")
             return
 
-        index = self.works_table.index(selected[0])
-        del self._current_works[index]
-        self._update_works_table()
+        confirm = show_info("Удалить выбранную работу?", need_confirm=True)
+        if confirm:
+            index = self.works_table.index(selected[0])
+            del self._current_works[index]
+            self._update_works_table()
 
     def _save_order(self) -> None:
-        """Сохранение наряда с полной валидацией."""
+        """Сохранение наряда с комплексной валидацией."""
         try:
             # Валидация основных полей
-            errors = self._validate_basic_fields()
-            if errors:
-                show_error("\n".join(errors))
-                return
+            errors = []
+            if not validate_date(self.date_entry.get()):
+                errors.append("Неверная дата")
+            if not self._current_workers:
+                errors.append("Не выбраны рабочие")
+            if not self._current_works:
+                errors.append("Нет работ")
 
-            # Валидация связанных данных
+            # Проверка выбора изделия и контракта
             product_id = self._get_selected_id("products")
             contract_id = self._get_selected_id("contracts")
-            if not product_id or not contract_id:
-                show_error("Не выбрано изделие или контракт")
+            if not product_id:
+                errors.append("Не выбрано изделие")
+            if not contract_id:
+                errors.append("Не выбран контракт")
+
+            if errors:
+                show_error(" ".join(errors))
                 return
 
             # Сохранение в БД
             order_id = self._save_to_database(product_id, contract_id)
             self._save_related_data(order_id)
-
-            show_info("Наряд успешно сохранен")
+            show_info("Наряд сохранен")
             self._clear_form()
-        except Exception as e:
-            logger.error(f"Ошибка сохранения наряда: {str(e)}")
-            show_error("Ошибка сохранения данных")
 
-    def _validate_basic_fields(self) -> List[str]:
-        """Валидация обязательных полей формы."""
-        errors = []
-        if not validate_date(self.date_entry.get()):
-            errors.append("Неверный формат даты (дд.мм.гггг)")
-        if not self._current_workers:
-            errors.append("Выберите минимум одного рабочего")
-        if not self._current_works:
-            errors.append("Добавьте минимум один вид работ")
-        return errors
+        except Exception as e:
+            logger.error(f"Ошибка сохранения: {str(e)}")
+            show_error("Не удалось сохранить наряд")
 
     def _get_selected_id(self, field: str) -> Optional[int]:
-        """Получение ID выбранного элемента из комбобокса."""
-        value = getattr(self, f"{field}_combobox").get()
+        """Получение ID из выпадающего списка."""
+        combobox = getattr(self, f"{field}_combobox")
+        value = combobox.get()
         return int(value.split(" - ")[0]) if value else None
 
     def _save_to_database(self, product_id: int, contract_id: int) -> int:
-        """Сохранение основного наряда в БД."""
-        total = sum(work["price"] * work["quantity"] for work in self._current_works)
-
+        """Сохранение основной записи наряда."""
+        total = sum(w["price"] * w["quantity"] for w in self._current_works)
         result = self.db.execute_query(
             """INSERT INTO work_orders 
                (order_date, product_id, contract_id, total_amount)
@@ -273,13 +315,10 @@ class WorkOrderForm(ctk.CTkFrame):
                RETURNING id""",
             (self.date_entry.get(), product_id, contract_id, total)
         )
-
-        if not result:
-            raise ValueError("Ошибка сохранения наряда")
-        return result[0][0]
+        return result[0][0] if result else None
 
     def _save_related_data(self, order_id: int) -> None:
-        """Сохранение связанных данных (работники и виды работ)."""
+        """Сохранение связанных данных в БД."""
         # Сохранение рабочих
         workers_data = [(order_id, worker_id) for worker_id in self._current_workers]
         self.db.execute_query(
@@ -288,10 +327,10 @@ class WorkOrderForm(ctk.CTkFrame):
             many=True
         )
 
-        # Сохранение видов работ
+        # Сохранение работ
         works_data = [
-            (order_id, work["type_id"], work["quantity"], work["price"] * work["quantity"])
-            for work in self._current_works
+            (order_id, w["type_id"], w["quantity"], w["price"] * w["quantity"])
+            for w in self._current_works
         ]
         self.db.execute_query(
             """INSERT INTO order_work_types 
@@ -302,7 +341,7 @@ class WorkOrderForm(ctk.CTkFrame):
         )
 
     def _clear_form(self) -> None:
-        """Очистка формы после успешного сохранения."""
+        """Очистка формы после сохранения."""
         self.date_entry.delete(0, "end")
         self.date_entry.insert(0, datetime.now().strftime("%d.%m.%Y"))
         self.products_combobox.set("")
@@ -314,34 +353,43 @@ class WorkOrderForm(ctk.CTkFrame):
 
 
 class WorkTypeSelectionDialog(ctk.CTkToplevel):
-    """Диалог выбора вида работ с возможностью указания количества."""
+    """Диалог выбора вида работ с поддержкой единиц измерения."""
 
     def __init__(self, parent: ctk.CTkFrame, work_types: List[Tuple]):
         super().__init__(parent)
         self.title("Выбор вида работ")
-        self.geometry("400x300")
+        self.geometry("500x350")
         self._selected = None
 
         # Таблица видов работ
         self.tree = ttk.Treeview(
             self,
-            columns=("Наименование", "Цена"),
+            columns=("Наименование", "Ед.изм.", "Цена"),
             show="headings"
         )
         self.tree.heading("Наименование", text="Наименование")
+        self.tree.heading("Ед.изм.", text="Ед. изм.")
         self.tree.heading("Цена", text="Цена за ед.")
         self.tree.pack(expand=True, fill="both", padx=10, pady=10)
 
         for wt in work_types:
-            self.tree.insert("", "end", values=(wt[1], f"{wt[2]:.2f} ₽"), tags=(wt[0],))
+            self.tree.insert("", "end", values=(
+                wt[1],
+                wt[3],
+                f"{wt[2]:.2f} ₽"
+            ), tags=(wt[0],))
 
-        # Поле для количества
-        self.quantity_entry = ctk.CTkEntry(self, placeholder_text="Количество")
-        self.quantity_entry.pack(pady=5)
+        # Поля ввода
+        self.quantity_frame = ctk.CTkFrame(self)
+        self.quantity_frame.pack(padx=10, pady=5, fill="x")
+
+        ctk.CTkLabel(self.quantity_frame, text="Количество:").pack(side="left", padx=5)
+        self.quantity_entry = ctk.CTkEntry(self.quantity_frame)
+        self.quantity_entry.pack(side="left", fill="x", expand=True)
 
         # Кнопки
         btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(pady=10)
+        btn_frame.pack(padx=10, pady=10)
 
         ctk.CTkButton(
             btn_frame,
@@ -356,7 +404,7 @@ class WorkTypeSelectionDialog(ctk.CTkToplevel):
         ).pack(side="right", padx=5)
 
     def _on_select(self) -> None:
-        """Обработка выбора вида работ."""
+        """Обработка выбора работы с валидацией."""
         selected = self.tree.selection()
         if not selected:
             show_error("Выберите вид работ")
@@ -370,12 +418,16 @@ class WorkTypeSelectionDialog(ctk.CTkToplevel):
             show_error("Введите корректное количество")
             return
 
-        self._selected = (
-            int(self.tree.item(selected[0], "tags")[0]),  # ID
-            self.tree.item(selected[0], "values")[0],  # Наименование
-            float(self.tree.item(selected[0], "values")[1].split()[0]),  # Цена
-            quantity
+        item = self.tree.item(selected[0])
+        work_id = int(item["tags"][0])
+        work_data = (
+            work_id,
+            item["values"][0],
+            float(item["values"][2].split()[0]),
+            quantity,
+            item["values"][1]
         )
+        self._selected = work_data
         self.destroy()
 
     def get_selected_work(self) -> Optional[Tuple]:
